@@ -1,0 +1,20 @@
+diff --git a/server/src/session_manager.ts b/server/src/session_manager.ts
+index 94ef206..c4cd6b5 100644
+--- a/server/src/session_manager.ts
++++ b/server/src/session_manager.ts
+@@ -97,6 +97,7 @@ class ProxySpec {
+                 localAddress: sourceAddress,
+                 family: this.ipFamily,
+                 rejectUnauthorized: !disableTlsVerification,
++                keepAlive: true,
+             });
+         }
+         // Proxy must be a string as long as the URL is truthy
+@@ -114,6 +115,7 @@ class ProxySpec {
+                 localAddress: sourceAddress,
+                 family: this.ipFamily,
+                 rejectUnauthorized: !disableTlsVerification,
++                keepAlive: true,
+             });
+         } catch (e) {
+             throw new Error(`Failed to create proxy agent for ${loggedProxy}`, {

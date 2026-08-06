@@ -1,0 +1,172 @@
+@import 'tailwindcss';
+
+:root,
+[data-theme='dark'] {
+  --bg: #070707;
+  --panel: #101010;
+  --panel-2: #161616;
+  --line: #232323;
+  --line-soft: #1a1a1a;
+  --fg: #f2f2f2;
+  --muted: #8b8b8b;
+  --muted-2: #5f5f5f;
+  --accent: #c6f24e;
+  --accent-fg: #0d1a00;
+  --accent-dim: #c6f24e29;
+  --danger: #ff6b6b;
+}
+
+[data-theme='light'] {
+  --bg: #f7f7f5;
+  --panel: #ffffff;
+  --panel-2: #f1f1ee;
+  --line: #e2e2dd;
+  --line-soft: #ececE7;
+  --fg: #131313;
+  --muted: #6b6b6b;
+  --muted-2: #9a9a9a;
+  --accent: #9fd117;
+  --accent-fg: #0d1a00;
+  --accent-dim: #9fd11726;
+  --danger: #d64545;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-muted-2: var(--muted-2);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-dim: var(--accent-dim);
+  --color-danger: var(--danger);
+
+  --font-sans: Vazirmatn, ui-sans-serif, system-ui, sans-serif;
+}
+
+html {
+  background: var(--bg);
+  color-scheme: dark;
+}
+[data-theme='light'] {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * باید داخل @layer base بماند: CSS بدون لایه در آبشار از @layer utilities
+ * تیلویند برنده می‌شود، و آن‌وقت `font: inherit` هر text-* روی دکمه‌ها را می‌خورد.
+ */
+@layer base {
+  button,
+  input {
+    font: inherit;
+    color: inherit;
+  }
+}
+
+/*
+ * متن‌های مختلط فارسی/انگلیسی: جهت هر متن از محتوای خودش تشخیص داده می‌شود
+ * (تا «Mard-E Tanha» درست رندر شود) ولی چینش به جهتِ صفحه گره می‌خورد،
+ * وگرنه عنوان‌های لاتین توی لیست RTL می‌چسبند به چپ.
+ */
+.bidi {
+  unicode-bidi: plaintext;
+  text-align: left;
+}
+[dir='rtl'] .bidi {
+  text-align: right;
+}
+.bidi-center {
+  unicode-bidi: plaintext;
+  text-align: center;
+}
+/* ورودی سرچ باید هرچه تایپ می‌شود را با جهت خودش نشان دهد */
+.bidi-auto {
+  unicode-bidi: plaintext;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 99px;
+  border: 3px solid var(--bg);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(-100%);
+  }
+}
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--panel-2);
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--fg) 6%, transparent),
+    transparent
+  );
+  animation: shimmer 1.4s infinite;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise {
+  animation: rise 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.toast-in {
+  animation: toast-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

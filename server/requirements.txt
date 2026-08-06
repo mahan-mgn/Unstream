@@ -1,0 +1,15 @@
+fastapi>=0.118
+uvicorn[standard]>=0.38
+httpx>=0.28
+mutagen>=1.47
+
+# extra های yt-dlp لازم‌اند، نه اختیاری: بک‌اند شبکه‌ی پیش‌فرض (urllib) روی جستجوی
+# یوتیوب IncompleteRead می‌دهد. requests/curl_cffi این را حل می‌کنند.
+yt-dlp[default,curl-cffi]>=2025.9.5
+
+# یوتیوب چالش امضا/n را با جاوااسکریپت می‌دهد؛ بدون این و یک JS runtime
+# (deno/bun/node) لیست فرمت خالی برمی‌گردد.
+yt-dlp-ejs>=0.8
+
+# پلاگین PO Token. سرورش جدا با `bash setup_potoken.sh` بیلد می‌شود.
+bgutil-ytdlp-pot-provider==1.3.1

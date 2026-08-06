@@ -1,0 +1,24 @@
+node_modules/
+dist/
+.env.local
+.env*.local
+*.local
+.DS_Store
+
+# اسکرین‌رکورد‌ها و هر ویدیوی محلی — نباید در مخزن باشند
+*.mp4
+
+# خروجی tsc -b
+*.tsbuildinfo
+
+# بک‌اند
+server/.venv/
+**/__pycache__/
+server/downloads/
+server/.env
+server/data/
+.pytest_cache/
+.coverage
+
+# سرور PO Token از سورس بیلد می‌شود — setup_potoken.sh بازش می‌سازد
+server/vendor/
