@@ -12,7 +12,16 @@ import { isActive, useDownloads, useTrackJob } from '../store/downloads'
 import { useSettings } from '../store/settings'
 import Artwork from './Artwork'
 import SourceBadge from './SourceBadge'
-import { CheckIcon, DownloadIcon, PauseIcon, PlayIcon, RetryIcon, Spinner } from './icons'
+import {
+  CheckIcon,
+  DownloadIcon,
+  LyricsIcon,
+  PauseIcon,
+  PlayIcon,
+  RetryIcon,
+  Spinner,
+  WarnIcon,
+} from './icons'
 
 interface Props {
   track: Track
@@ -145,6 +154,28 @@ export default function TrackRow({
         <span className="w-9 text-center text-[11px] tabular-nums text-muted-2">
           {fmtDuration(track.durationMs, lang)}
         </span>
+
+        {job?.warning && (
+          <span
+            title={job.warning}
+            aria-label={job.warning}
+            className="grid size-7 place-items-center text-warn"
+          >
+            <WarnIcon className="size-4" />
+          </span>
+        )}
+
+        {job?.lyricsUrl && (
+          <a
+            href={job.lyricsUrl}
+            download
+            title={t.lyrics}
+            aria-label={t.lyrics}
+            className="grid size-7 place-items-center rounded-md text-muted transition hover:bg-panel-2 hover:text-fg"
+          >
+            <LyricsIcon className="size-4" />
+          </a>
+        )}
 
         {job?.status === 'ready' ? (
           <a

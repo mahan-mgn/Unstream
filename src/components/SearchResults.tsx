@@ -5,13 +5,15 @@ import type { Album, Artist, Playlist, SearchResults as Results, Track } from '.
 import Artwork from './Artwork'
 import SourceBadge from './SourceBadge'
 import TrackRow from './TrackRow'
-import { ChevronIcon, PlayIcon } from './icons'
+import { AlbumCard, ArtistCard } from './cards'
+import { ChevronIcon } from './icons'
 
 interface Props {
   results: Results
   playingId: string | null
   onTogglePlay: (track: Track) => void
   onOpenAlbum: (album: Album) => void
+  onOpenArtist: (artist: Artist) => void
 }
 
 type TabId = 'all' | 'songs' | 'artists' | 'albums' | 'playlists'
@@ -51,58 +53,6 @@ function Section({
   )
 }
 
-function ArtistCard({ artist }: { artist: Artist }) {
-  return (
-    <a
-      href={artist.sourceUrl}
-      target="_blank"
-      rel="noreferrer"
-      className="group flex flex-col items-center gap-2 rounded-xl p-2 text-center transition hover:bg-panel-2"
-    >
-      <Artwork
-        src={artist.artworkUrl}
-        alt={artist.name}
-        seed={artist.id}
-        rounded="rounded-full"
-        className="aspect-square w-full transition group-hover:scale-[1.03]"
-      />
-      <div className="w-full">
-        <p className="bidi-center truncate text-xs">{artist.name}</p>
-        <p className="truncate text-[10px] text-muted-2">{artist.subtitle}</p>
-      </div>
-    </a>
-  )
-}
-
-function AlbumCard({ album, onOpen }: { album: Album; onOpen: () => void }) {
-  const { lang } = useI18n()
-  return (
-    <button onClick={onOpen} className="group rounded-xl p-2 text-start transition hover:bg-panel-2">
-      <div className="relative">
-        <Artwork
-          src={album.artworkUrl}
-          alt={album.title}
-          seed={album.id}
-          className="aspect-square w-full"
-        />
-        <span className="absolute inset-0 grid place-items-center rounded-lg bg-black/45 opacity-0 transition group-hover:opacity-100">
-          <span className="grid size-9 place-items-center rounded-full bg-accent text-accent-fg">
-            <PlayIcon className="size-4" />
-          </span>
-        </span>
-        <span className="absolute end-1.5 top-1.5 opacity-0 transition group-hover:opacity-100">
-          <SourceBadge source={album.source} />
-        </span>
-      </div>
-      <p className="bidi mt-2 truncate text-xs">{album.title}</p>
-      <p className="truncate text-[10px] text-muted-2">
-        <bdi>{album.artist}</bdi>
-        {album.year ? ` · ${digits(album.year, lang)}` : ''}
-      </p>
-    </button>
-  )
-}
-
 function PlaylistRow({ playlist }: { playlist: Playlist }) {
   const { t } = useI18n()
   return (
@@ -129,7 +79,13 @@ function PlaylistRow({ playlist }: { playlist: Playlist }) {
   )
 }
 
-export default function SearchResults({ results, playingId, onTogglePlay, onOpenAlbum }: Props) {
+export default function SearchResults({
+  results,
+  playingId,
+  onTogglePlay,
+  onOpenAlbum,
+  onOpenArtist,
+}: Props) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [tab, setTab] = useState<TabId>('all')
   const { t, lang } = useI18n()
@@ -225,7 +181,7 @@ export default function SearchResults({ results, playingId, onTogglePlay, onOpen
           >
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
               {(tab === 'artists' ? results.artists : cut(results.artists, 'artists')).map((x) => (
-                <ArtistCard key={x.id} artist={x} />
+                <ArtistCard key={x.id} artist={x} onOpen={() => onOpenArtist(x)} />
               ))}
             </div>
           </Section>

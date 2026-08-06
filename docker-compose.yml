@@ -1,0 +1,48 @@
+# آنستریم به‌صورت کامل: فرانت، بک‌اند، و سرور PO Token.
+#
+#   docker compose up --build     →  http://localhost:8080
+#
+# کوکی یوتیوب را در .env کنار همین فایل بگذار (نگاه کن به .env.docker.example).
+# داخل کانتینر کوکی از مرورگر خوانده نمی‌شود — فقط فایل Netscape.
+
+services:
+  potoken:
+    # PO Token یکی از سه گیت یوتیوب است. اینجا حالت HTTP استفاده می‌شود:
+    # سرور یک بار بالا می‌آید و برای هر توکن، node را از نو اجرا نمی‌کند.
+    image: brainicism/bgutil-ytdlp-pot-provider:1.3.1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4416/ping').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+
+  server:
+    build: ./server
+    restart: unless-stopped
+    depends_on:
+      - potoken
+    environment:
+      UNSTREAM_POT_BASE_URL: http://potoken:4416
+      UNSTREAM_COOKIES_FILE: ${UNSTREAM_COOKIES_FILE:-}
+      UNSTREAM_SPOTIFY_CLIENT_ID: ${UNSTREAM_SPOTIFY_CLIENT_ID:-}
+      UNSTREAM_SPOTIFY_CLIENT_SECRET: ${UNSTREAM_SPOTIFY_CLIENT_SECRET:-}
+      UNSTREAM_ACOUSTID_KEY: ${UNSTREAM_ACOUSTID_KEY:-}
+      UNSTREAM_CONCURRENCY: ${UNSTREAM_CONCURRENCY:-3}
+      UNSTREAM_FILE_RETENTION: ${UNSTREAM_FILE_RETENTION:-604800}
+    volumes:
+      - unstream-data:/data
+      # پوشه سوار می‌شود، نه فایل: bind کردنِ فایلی که وجود ندارد،
+      # روی داکر دسکتاپ به‌جای خطا یک پوشه‌ی خالی می‌سازد و کوکی بی‌صدا نادیده می‌رود.
+      - ./secrets:/secrets:ro
+
+  web:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "${UNSTREAM_PORT:-8080}:80"
+
+volumes:
+  unstream-data:

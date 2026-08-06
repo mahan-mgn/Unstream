@@ -1,0 +1,8 @@
+.venv
+vendor
+downloads
+data
+.env
+**/__pycache__
+tests
+.pytest_cache

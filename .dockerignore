@@ -1,0 +1,13 @@
+node_modules
+dist
+.git
+*.mp4
+*.tsbuildinfo
+server/.venv
+server/vendor
+server/downloads
+server/data
+server/.env
+**/__pycache__
+.env
+.env.local

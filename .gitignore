@@ -22,3 +22,7 @@ server/data/
 
 # سرور PO Token از سورس بیلد می‌شود — setup_potoken.sh بازش می‌سازد
 server/vendor/
+
+# کوکی و کلیدهایی که به داکر سوار می‌شوند
+secrets/*
+!secrets/.gitkeep

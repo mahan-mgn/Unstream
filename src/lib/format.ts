@@ -40,7 +40,46 @@ export function fileExt(format: string | undefined): string {
   return (format ?? 'mp3').split(' ')[0]
 }
 
-/** برچسب فرمت با ارقام زبانِ فعلی، مثل «mp3 ۱۲۸» */
+/**
+ * برچسب فرمت با ارقام زبانِ فعلی، مثل «mp3 ۱۲۸».
+ *
+ * فقط بخش عددی فارسی می‌شود: «mp3» یک نامِ لاتین است و «mp۳» غلط است، نه ترجمه.
+ */
 export function formatLabel(format: string | undefined, lang = 'fa'): string {
-  return digits(format ?? 'mp3', lang)
+  const [codec, ...rest] = (format ?? 'mp3').split(' ')
+  return rest.length ? `${codec} ${digits(rest.join(' '), lang)}` : codec
+}
+
+const UNITS_FA = ['بایت', 'کیلوبایت', 'مگابایت', 'گیگابایت']
+const UNITS_EN = ['B', 'KB', 'MB', 'GB']
+
+/** حجم خوانا — «۴٫۲ مگابایت» */
+export function bytes(n: number, lang = 'fa'): string {
+  const units = lang === 'fa' ? UNITS_FA : UNITS_EN
+  let value = Math.max(0, n)
+  let step = 0
+  while (value >= 1024 && step < units.length - 1) {
+    value /= 1024
+    step++
+  }
+  // زیر ۱۰ یک رقم اعشار می‌خواهد، بالاترش نویز است. «۱٫۰» هم نویز است.
+  const text =
+    value >= 10 || step === 0
+      ? String(Math.round(value))
+      : value.toFixed(1).replace(/\.0$/, '')
+  return `${digits(text.replace('.', lang === 'fa' ? '٫' : '.'), lang)} ${units[step]}`
+}
+
+/** تاریخ کوتاه محلی از ثانیه‌ی یونیکس */
+export function shortDate(seconds: number, lang = 'fa'): string {
+  const locale = lang === 'fa' ? 'fa-IR' : 'en-US'
+  try {
+    return new Date(seconds * 1000).toLocaleDateString(locale, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    })
+  } catch {
+    return ''
+  }
 }

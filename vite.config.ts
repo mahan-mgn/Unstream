@@ -4,6 +4,10 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  test: {
+    // فقط منطق خالص تست می‌شود؛ کامپوننت‌ها به DOM و کتابخانه‌ی جدا نیاز دارند
+    include: ['src/**/*.test.ts'],
+  },
   server: {
     port: 5174,
     proxy: {

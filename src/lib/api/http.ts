@@ -1,4 +1,11 @@
-import type { AlbumDetail, DownloadProgress, MusicApi, SearchResults } from '../types'
+import type {
+  AlbumDetail,
+  ArtistDetail,
+  DownloadProgress,
+  LibraryPage,
+  MusicApi,
+  SearchResults,
+} from '../types'
 
 const BASE = '/api'
 
@@ -31,6 +38,19 @@ export const httpApi: MusicApi = {
     return json<AlbumDetail>(`/album?ref=${encodeURIComponent(idOrUrl)}`, signal)
   },
 
+  getArtist(idOrUrl, signal) {
+    return json<ArtistDetail>(`/artist?ref=${encodeURIComponent(idOrUrl)}`, signal)
+  },
+
+  library(query, signal) {
+    return json<LibraryPage>(`/library?q=${encodeURIComponent(query)}&limit=200`, signal)
+  },
+
+  async removeFromLibrary(jobId) {
+    const res = await fetch(`${BASE}/library/${jobId}`, { method: 'DELETE' })
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  },
+
   download({ track, quality }, onProgress) {
     const ctrl = new AbortController()
     let events: EventSource | null = null
@@ -56,7 +76,7 @@ export const httpApi: MusicApi = {
     })
       .then((r) => {
         if (!r.ok) throw new Error(`${r.status}`)
-        return r.json() as Promise<{ jobId: string }>
+        return r.json() as Promise<{ jobId: string; reused: boolean }>
       })
       .then(({ jobId }) => {
         id = jobId

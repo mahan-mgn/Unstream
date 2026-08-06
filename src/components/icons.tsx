@@ -115,6 +115,37 @@ export const ZipIcon = ({ className = base }: P) => (
   </svg>
 )
 
+export const LibraryIcon = ({ className = base }: P) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className={className}>
+    <path d="M4 4v16M8.5 4v16" strokeLinecap="round" />
+    <path d="m13 5.2 5 15.2" strokeLinecap="round" />
+    <path d="M11.5 9.5h9M11.5 15h9" strokeLinecap="round" opacity="0.45" />
+  </svg>
+)
+
+export const TrashIcon = ({ className = base }: P) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className={className}>
+    <path d="M4 7h16M10 4h4M9 7v12M15 7v12" strokeLinecap="round" />
+    <path d="M6 7v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7" strokeLinecap="round" />
+  </svg>
+)
+
+export const LyricsIcon = ({ className = base }: P) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className={className}>
+    <path d="M9 18V6l10-2v12" strokeLinecap="round" strokeLinejoin="round" />
+    <circle cx="6.5" cy="18" r="2.5" />
+    <circle cx="16.5" cy="16" r="2.5" />
+  </svg>
+)
+
+export const WarnIcon = ({ className = base }: P) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className={className}>
+    <path d="M12 4.5 21 20H3l9-15.5Z" strokeLinejoin="round" />
+    <path d="M12 10v4.5" strokeLinecap="round" />
+    <circle cx="12" cy="17.2" r="0.9" fill="currentColor" stroke="none" />
+  </svg>
+)
+
 export const Spinner = ({ className = base }: P) => (
   <svg viewBox="0 0 24 24" fill="none" className={`${className} animate-spin`}>
     <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2.2" opacity="0.25" />

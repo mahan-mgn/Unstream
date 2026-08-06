@@ -9,14 +9,28 @@ export const SOURCE_LABEL: Record<Source, string> = {
 }
 
 /** کیفیت‌های قابل انتخاب در هدر */
-export type Quality = '128' | '192' | '320' | 'original'
+export type Quality = '128' | '192' | '320' | 'm4a' | 'opus' | 'flac' | 'original'
 
-/** برچسب «اورجینال» ترجمه می‌شود، بقیه فقط عددند */
-export const QUALITIES: { id: Quality; kbps: number | null }[] = [
+/**
+ * دو دسته‌اند و در UI هم جدا نشان داده می‌شوند: بیت‌ریت mp3 (فقط عدد) و کدک
+ * (اسم خودش). «اورجینال» یعنی هیچ ترنسکدی — همان چیزی که منبع داده.
+ */
+export const MP3_QUALITIES: { id: Quality; kbps: number }[] = [
   { id: '128', kbps: 128 },
   { id: '192', kbps: 192 },
   { id: '320', kbps: 320 },
-  { id: 'original', kbps: null },
+]
+
+export const CODEC_QUALITIES: { id: Quality; label: string }[] = [
+  { id: 'm4a', label: 'm4a' },
+  { id: 'opus', label: 'opus' },
+  { id: 'flac', label: 'flac' },
+]
+
+export const QUALITIES: Quality[] = [
+  ...MP3_QUALITIES.map((q) => q.id),
+  ...CODEC_QUALITIES.map((q) => q.id),
+  'original',
 ]
 
 export interface Track {
@@ -69,6 +83,12 @@ export interface AlbumDetail extends Album {
   tracks: Track[]
 }
 
+/** صفحه‌ی هنرمند: چند ترک محبوب به‌علاوه‌ی دیسکوگرافی */
+export interface ArtistDetail extends Artist {
+  topTracks: Track[]
+  albums: Album[]
+}
+
 export interface SearchResults {
   query: string
   tracks: Track[]
@@ -97,11 +117,34 @@ export interface DownloadProgress {
   fileUrl?: string
   /** فرمت نهایی فایل، مثلاً mp3 */
   format?: string
+  /** فایل سالم است ولی چیزی مشکوک بوده — مثلاً AcoustID ترک دیگری را شناخته */
+  warning?: string
+  /** فایل .lrc اگر متن هم‌زمان‌شده پیدا شده باشد */
+  lyricsUrl?: string
 }
 
 export interface DownloadRequest {
   track: Track
   quality: Quality
+}
+
+/** یک فایل آماده روی دیسک سرور */
+export interface LibraryItem {
+  jobId: string
+  track: Track
+  quality: Quality
+  format?: string
+  bytes: number
+  fileUrl: string
+  lyricsUrl?: string
+  /** ثانیه‌ی یونیکس */
+  createdAt: number
+}
+
+export interface LibraryPage {
+  items: LibraryItem[]
+  total: number
+  totalBytes: number
 }
 
 /**
@@ -112,6 +155,15 @@ export interface MusicApi {
   search(query: string, signal?: AbortSignal): Promise<SearchResults>
   /** ورودی می‌تواند id داخلی یا لینک اپل‌موزیک/اسپاتیفای/دیزر باشد */
   getAlbum(idOrUrl: string, signal?: AbortSignal): Promise<AlbumDetail>
+  /** ورودی id داخلی هنرمند یا لینک اپل‌موزیک/دیزر */
+  getArtist(idOrUrl: string, signal?: AbortSignal): Promise<ArtistDetail>
+  /**
+   * کتابخانه‌ی محلی — فایل‌هایی که قبلاً دانلود شده‌اند و هنوز روی دیسک سرورند.
+   * null یعنی این لایه کتابخانه ندارد (مود دمو).
+   */
+  library(query: string, signal?: AbortSignal): Promise<LibraryPage | null>
+  /** حذف کامل یک مورد از کتابخانه: فایل و ردیفش */
+  removeFromLibrary(jobId: string): Promise<void>
   /**
    * شروع دانلود. onProgress تا رسیدن به وضعیت نهایی صدا زده می‌شود.
    * تابع برگشتی، کار را کنسل می‌کند.

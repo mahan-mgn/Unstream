@@ -1,4 +1,12 @@
-import type { Album, AlbumDetail, Artist, Playlist, Source, Track } from '../types'
+import type {
+  Album,
+  AlbumDetail,
+  Artist,
+  ArtistDetail,
+  Playlist,
+  Source,
+  Track,
+} from '../types'
 
 const min = (m: number, s = 0) => (m * 60 + s) * 1000
 
@@ -214,3 +222,16 @@ export const PLAYLISTS: Playlist[] = [
 
 /** ترک‌های تخت برای سکشن «آهنگ‌ها» در نتایج جستجو */
 export const TOP_TRACKS: Track[] = albumDetail(ALBUMS[0]).tracks.slice(0, 8)
+
+/**
+ * صفحه‌ی هنرمند در مود دمو.
+ * کاتالوگ ماک فقط یک هنرمند واقعی دارد، پس دیسکوگرافی همه‌ی آلبوم‌هاست.
+ */
+export function artistDetail(artist: Artist): ArtistDetail {
+  return {
+    ...artist,
+    subtitle: `${ALBUMS.length} آلبوم`,
+    topTracks: TOP_TRACKS,
+    albums: [...ALBUMS].sort((a, b) => b.year - a.year),
+  }
+}

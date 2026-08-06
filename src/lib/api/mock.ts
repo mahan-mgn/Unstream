@@ -5,7 +5,14 @@ import type {
   MusicApi,
   SearchResults,
 } from '../types'
-import { ALBUMS, albumDetail, ARTISTS, PLAYLISTS, TOP_TRACKS } from './catalog'
+import {
+  ALBUMS,
+  albumDetail,
+  ARTISTS,
+  artistDetail,
+  PLAYLISTS,
+  TOP_TRACKS,
+} from './catalog'
 
 const wait = (ms: number, signal?: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
@@ -49,6 +56,22 @@ export const mockApi: MusicApi = {
       ALBUMS[0]
     return albumDetail(album) satisfies AlbumDetail
   },
+
+  async getArtist(idOrUrl, signal) {
+    await wait(500, signal)
+    const artist =
+      ARTISTS.find((a) => a.id === idOrUrl) ??
+      ARTISTS.find((a) => idOrUrl.includes(a.sourceUrl)) ??
+      ARTISTS[ARTISTS.length - 1]
+    return artistDetail(artist)
+  },
+
+  async library() {
+    // کتابخانه فایل واقعی روی دیسک سرور است؛ در مود دمو سروری در کار نیست
+    return null
+  },
+
+  async removeFromLibrary() {},
 
   download({ track, quality }: DownloadRequest, onProgress) {
     let canceled = false
@@ -96,7 +119,14 @@ export const mockApi: MusicApi = {
               emit({ status: 'tagging', percent: 100 })
               step(() => {
                 // سرور واقعی فرمتِ به‌دست‌آمده را می‌دهد، نه کیفیت درخواستی
-                const format = quality === 'original' ? 'm4a 256' : `mp3 ${quality}`
+                const format =
+                  quality === 'original'
+                    ? 'm4a 256'
+                    : /^\d+$/.test(quality)
+                      ? `mp3 ${quality}`
+                      : quality === 'flac'
+                        ? 'flac 16/44'
+                        : `${quality} 160`
                 emit({
                   status: 'ready',
                   percent: 100,

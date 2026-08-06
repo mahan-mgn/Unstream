@@ -14,6 +14,8 @@
   --accent-fg: #0d1a00;
   --accent-dim: #c6f24e29;
   --danger: #ff6b6b;
+  /* هشدار، نه خطا: فایل سالم است ولی تطابقش مشکوک */
+  --warn: #e8b44a;
 }
 
 [data-theme='light'] {
@@ -29,6 +31,7 @@
   --accent-fg: #0d1a00;
   --accent-dim: #9fd11726;
   --danger: #d64545;
+  --warn: #b57c11;
 }
 
 @theme inline {
@@ -44,6 +47,7 @@
   --color-accent-fg: var(--accent-fg);
   --color-accent-dim: var(--accent-dim);
   --color-danger: var(--danger);
+  --color-warn: var(--warn);
 
   --font-sans: Vazirmatn, ui-sans-serif, system-ui, sans-serif;
 }

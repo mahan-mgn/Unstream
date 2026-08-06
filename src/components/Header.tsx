@@ -1,11 +1,16 @@
-import { digits } from '../lib/format'
 import { useI18n } from '../lib/i18n'
-import { QUALITIES } from '../lib/types'
+import QualityPicker from './QualityPicker'
+import { HeadphonesIcon, LibraryIcon, MoonIcon, SunIcon } from './icons'
 import { useSettings } from '../store/settings'
-import { HeadphonesIcon, MoonIcon, SunIcon } from './icons'
 
-export default function Header({ onHome }: { onHome: () => void }) {
-  const { quality, setQuality, theme, toggleTheme } = useSettings()
+interface Props {
+  onHome: () => void
+  onLibrary: () => void
+  inLibrary: boolean
+}
+
+export default function Header({ onHome, onLibrary, inLibrary }: Props) {
+  const { theme, toggleTheme } = useSettings()
   const { t, lang, setLang } = useI18n()
 
   return (
@@ -22,28 +27,20 @@ export default function Header({ onHome }: { onHome: () => void }) {
         </button>
 
         <div className="flex items-center gap-2">
-          <div
-            className="flex items-center gap-1 rounded-full border border-line bg-panel p-0.5 ps-3"
-            role="radiogroup"
-            aria-label={t.quality}
+          <button
+            onClick={onLibrary}
+            aria-current={inLibrary ? 'page' : undefined}
+            className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition ${
+              inLibrary
+                ? 'border-accent bg-accent font-semibold text-accent-fg'
+                : 'border-line bg-panel text-muted hover:text-fg'
+            }`}
           >
-            <span className="text-[11px] text-muted-2">{t.quality}</span>
-            {QUALITIES.map((q) => (
-              <button
-                key={q.id}
-                role="radio"
-                aria-checked={quality === q.id}
-                onClick={() => setQuality(q.id)}
-                className={`rounded-full px-2.5 py-1 text-xs transition ${
-                  quality === q.id
-                    ? 'bg-accent font-semibold text-accent-fg'
-                    : 'text-muted hover:text-fg'
-                }`}
-              >
-                {q.kbps === null ? t.qualityOriginal : digits(q.kbps, lang)}
-              </button>
-            ))}
-          </div>
+            <LibraryIcon className="size-3.5" />
+            {t.library}
+          </button>
+
+          <QualityPicker />
 
           <button
             onClick={() => setLang(lang === 'fa' ? 'en' : 'fa')}

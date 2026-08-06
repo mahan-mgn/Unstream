@@ -14,6 +14,10 @@ export interface Job {
   error?: string
   fileUrl?: string
   format?: string
+  /** فایل سالم است ولی AcoustID ترک دیگری را شناخته */
+  warning?: string
+  /** فایل .lrc اگر متن هم‌زمان‌شده پیدا شده باشد */
+  lyricsUrl?: string
   createdAt: number
   /** زمان شروع دانلود واقعی */
   startedAt?: number
@@ -84,6 +88,8 @@ export const useDownloads = create<DownloadState>((set, get) => {
                 error: p.error,
                 fileUrl: p.fileUrl,
                 format: p.format ?? j.format,
+                warning: p.warning ?? j.warning,
+                lyricsUrl: p.lyricsUrl ?? j.lyricsUrl,
                 startedAt:
                   p.status === 'downloading' && !j.startedAt ? Date.now() : j.startedAt,
                 finishedAt: p.status === 'ready' ? Date.now() : j.finishedAt,
