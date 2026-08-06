@@ -7,6 +7,7 @@ from .config import (
     COOKIES_FILE,
     FFMPEG_LOCATION,
     JS_RUNTIME,
+    POT_BASE_URL,
     POT_SERVER_HOME,
 )
 
@@ -37,7 +38,12 @@ def auth_opts() -> dict:
     elif COOKIES_BROWSER:
         opts["cookiesfrombrowser"] = (COOKIES_BROWSER, None, None, None)
 
-    if POT_SERVER_HOME:
+    # PO Token دو راه دارد و پلاگین هر دو را می‌شناسد: اسکریپت محلی (ویندوز، بدون
+    # داکر) یا سرور HTTP جدا (داکر). اگر آدرس HTTP داده شده باشد همان ارجح است،
+    # چون سرورش یک بار بالا می‌آید و node را برای هر توکن دوباره اجرا نمی‌کند.
+    if POT_BASE_URL:
+        opts["extractor_args"] = {"youtubepot-bgutilhttp": {"base_url": [POT_BASE_URL]}}
+    elif POT_SERVER_HOME:
         opts["extractor_args"] = {
             "youtubepot-bgutilscript": {"server_home": [POT_SERVER_HOME]},
         }
@@ -67,4 +73,4 @@ def has_jsruntime() -> bool:
 
 
 def has_potoken() -> bool:
-    return bool(POT_SERVER_HOME)
+    return bool(POT_BASE_URL or POT_SERVER_HOME)

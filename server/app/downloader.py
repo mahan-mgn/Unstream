@@ -2,23 +2,40 @@
 
 from __future__ import annotations
 
+import base64
 import re
 import time
 from collections.abc import Callable
 from pathlib import Path
 
 import httpx
-from mutagen.id3 import APIC, ID3, TALB, TIT2, TPE1, TPE2
+from mutagen.flac import FLAC, Picture
+from mutagen.id3 import APIC, ID3, TALB, TIT2, TPE1, TPE2, USLT
 from mutagen.mp3 import MP3
 from mutagen.mp4 import MP4, MP4Cover
+from mutagen.oggopus import OggOpus
 
 from . import ydl
-from .config import DOWNLOAD_DIR
+from .config import DOWNLOAD_DIR, LYRICS_ENABLED
 from .models import Quality, Track
+from .providers import lrclib
 
 ProgressFn = Callable[[float], None]
 
-BITRATE = {"128": "128", "320": "320"}
+# mp3 با بیت‌ریت مشخص
+BITRATE = {"128": "128", "192": "192", "320": "320"}
+
+# کدک‌های دیگر. opus بیت‌ریت می‌خواهد (ffmpeg برایش quality-scale ندارد)؛
+# flac و m4a نه — flac بی‌اتلاف است و m4a وقتی منبع خودش aac باشد فقط کپی می‌شود.
+CODEC_BITRATE: dict[str, str | None] = {"m4a": None, "opus": "160", "flac": None}
+
+# پسوندی که از هر کیفیت انتظار داریم — برای انتخاب فایل درست بعد از ترنسکد
+EXT: dict[str, str] = {
+    **{q: ".mp3" for q in BITRATE},
+    "m4a": ".m4a",
+    "opus": ".opus",
+    "flac": ".flac",
+}
 
 
 def safe_name(text: str) -> str:
@@ -55,6 +72,15 @@ def _ydl_opts(out_stem: Path, quality: Quality, on_progress: ProgressFn) -> dict
                 "preferredquality": BITRATE[quality],
             }
         )
+    elif quality in CODEC_BITRATE:
+        if quality == "m4a":
+            # اگر منبع از قبل aac باشد، yt-dlp فقط ظرف را عوض می‌کند و
+            # ترنسکد دوباره‌ی لاسی‌به‌لاسی اتفاق نمی‌افتد
+            opts["format"] = "bestaudio[ext=m4a]/bestaudio/best"
+        step: dict = {"key": "FFmpegExtractAudio", "preferredcodec": quality}
+        if bitrate := CODEC_BITRATE[quality]:
+            step["preferredquality"] = bitrate
+        opts["postprocessors"].append(step)
     else:
         # «اورجینال»: بدون ترنسکد، فقط در ظرف m4a قرار می‌گیرد اگر ممکن باشد
         opts["format"] = "bestaudio[ext=m4a]/bestaudio/best"
@@ -76,19 +102,26 @@ def _fetch_artwork(url: str | None) -> tuple[bytes, str] | None:
         return None
 
 
-def _tag_mp3(path: Path, track: Track, cover: tuple[bytes, str] | None) -> None:
+def _picture(cover: tuple[bytes, str]) -> Picture:
+    """بلوک تصویر استاندارد FLAC — در Opus هم همین بلوک base64 می‌شود."""
+    data, mime = cover
+    pic = Picture()
+    pic.data = data
+    pic.type = 3  # جلد جلو
+    pic.mime = mime
+    pic.desc = "Cover"
+    return pic
+
+
+def _tag_mp3(path: Path, track: Track, cover, lyrics) -> None:
     audio = MP3(path, ID3=ID3)
     if audio.tags is None:
         audio.add_tags()
     tags = audio.tags
     assert tags is not None
 
-    tags.delall("TIT2")
-    tags.delall("TPE1")
-    tags.delall("TALB")
-    tags.delall("TPE2")
-    tags.delall("TDRC")
-    tags.delall("APIC")
+    for frame in ("TIT2", "TPE1", "TALB", "TPE2", "TDRC", "APIC", "USLT"):
+        tags.delall(frame)
 
     tags.add(TIT2(encoding=3, text=track.title))
     tags.add(TPE1(encoding=3, text=track.artist))
@@ -98,10 +131,13 @@ def _tag_mp3(path: Path, track: Track, cover: tuple[bytes, str] | None) -> None:
     if cover:
         data, mime = cover
         tags.add(APIC(encoding=3, mime=mime, type=3, desc="Cover", data=data))
+    if lyrics and lyrics.plain:
+        # USLT متنِ بدون زمان است؛ نسخه‌ی هم‌زمان‌شده در فایل .lrc کنارش می‌نشیند
+        tags.add(USLT(encoding=3, lang="und", desc="", text=lyrics.plain))
     audio.save(v2_version=3)
 
 
-def _tag_mp4(path: Path, track: Track, cover: tuple[bytes, str] | None) -> None:
+def _tag_mp4(path: Path, track: Track, cover, lyrics) -> None:
     audio = MP4(path)
     audio["\xa9nam"] = track.title
     audio["\xa9ART"] = track.artist
@@ -112,7 +148,50 @@ def _tag_mp4(path: Path, track: Track, cover: tuple[bytes, str] | None) -> None:
         data, mime = cover
         fmt = MP4Cover.FORMAT_PNG if "png" in mime else MP4Cover.FORMAT_JPEG
         audio["covr"] = [MP4Cover(data, imageformat=fmt)]
+    if lyrics and lyrics.plain:
+        audio["\xa9lyr"] = lyrics.plain
     audio.save()
+
+
+def _tag_flac(path: Path, track: Track, cover, lyrics) -> None:
+    audio = FLAC(path)
+    audio["title"] = track.title
+    audio["artist"] = track.artist
+    if track.album:
+        audio["album"] = track.album
+        audio["albumartist"] = track.artist
+    if lyrics and lyrics.plain:
+        audio["lyrics"] = lyrics.plain
+    if cover:
+        audio.clear_pictures()
+        audio.add_picture(_picture(cover))
+    audio.save()
+
+
+def _tag_opus(path: Path, track: Track, cover, lyrics) -> None:
+    audio = OggOpus(path)
+    audio["title"] = track.title
+    audio["artist"] = track.artist
+    if track.album:
+        audio["album"] = track.album
+        audio["albumartist"] = track.artist
+    if lyrics and lyrics.plain:
+        audio["lyrics"] = lyrics.plain
+    if cover:
+        # Ogg تگ باینری ندارد؛ قرارداد این است که بلوک FLAC را base64 کنیم
+        audio["metadata_block_picture"] = [
+            base64.b64encode(_picture(cover).write()).decode("ascii")
+        ]
+    audio.save()
+
+
+_TAGGERS = {
+    ".mp3": _tag_mp3,
+    ".m4a": _tag_mp4,
+    ".mp4": _tag_mp4,
+    ".flac": _tag_flac,
+    ".opus": _tag_opus,
+}
 
 
 def describe(path: Path) -> str:
@@ -130,11 +209,15 @@ def describe(path: Path) -> str:
     for attempt in range(3):
         try:
             if ext == "mp3":
-                from mutagen.mp3 import MP3
-
                 bitrate = MP3(path).info.bitrate
             elif ext in ("m4a", "mp4"):
                 bitrate = MP4(path).info.bitrate
+            elif ext == "opus":
+                bitrate = OggOpus(path).info.bitrate
+            elif ext == "flac":
+                info = FLAC(path).info
+                # flac بی‌اتلاف است؛ عمق بیت و نرخ نمونه گویاتر از بیت‌ریت‌اند
+                return f"flac {info.bits_per_sample}/{int(info.sample_rate / 1000)}"
             else:
                 return ext
             return f"{ext} {int(bitrate / 1000)}" if bitrate else ext
@@ -145,16 +228,50 @@ def describe(path: Path) -> str:
     return ext
 
 
-def tag(path: Path, track: Track) -> None:
+def fetch_lyrics(track: Track):
+    """متن آهنگ، یا None. خطا هیچ‌وقت بالا نمی‌رود — متن جزء اختیاری است."""
+    if not LYRICS_ENABLED:
+        return None
+    try:
+        return lrclib.fetch(track.title, track.artist, track.album, track.durationMs)
+    except Exception:
+        return None
+
+
+def write_lrc(path: Path, lyrics) -> Path | None:
+    """
+    متن هم‌زمان‌شده را کنار فایل صوتی می‌نویسد.
+
+    هم‌نام بودن با فایل صوتی قرارداد عملاً جهانی است — VLC، foobar2000، Poweramp
+    و بقیه بدون تنظیمات پیدایش می‌کنند.
+    """
+    if not lyrics or not lyrics.synced:
+        return None
+    lrc = path.with_suffix(".lrc")
+    try:
+        lrc.write_text(lyrics.synced, encoding="utf-8")
+        return lrc
+    except Exception:
+        return None
+
+
+def tag(path: Path, track: Track, lyrics=None) -> None:
     """تگ‌گذاری بر اساس پسوند. خطای تگ نباید کل دانلود را بسوزاند."""
     cover = _fetch_artwork(track.artworkUrl)
+    tagger = _TAGGERS.get(path.suffix.lower())
+    if tagger is None:
+        return
     try:
-        if path.suffix == ".mp3":
-            _tag_mp3(path, track, cover)
-        elif path.suffix in (".m4a", ".mp4"):
-            _tag_mp4(path, track, cover)
+        tagger(path, track, cover, lyrics)
     except Exception:
         pass  # فایل صوتی سالم است؛ فقط تگ نخورد
+
+
+def finalize(path: Path, track: Track) -> Path | None:
+    """متن را می‌گیرد، تگ می‌زند و .lrc را می‌نویسد. مسیر .lrc را برمی‌گرداند."""
+    lyrics = fetch_lyrics(track)
+    tag(path, track, lyrics)
+    return write_lrc(path, lyrics)
 
 
 def download(track: Track, url: str, quality: Quality, on_progress: ProgressFn) -> Path:
@@ -182,9 +299,9 @@ def download(track: Track, url: str, quality: Quality, on_progress: ProgressFn) 
     with YoutubeDL(_ydl_opts(stem, quality, on_progress)) as y:
         y.extract_info(url, download=True)
 
-    wanted = ".mp3" if quality in BITRATE else None
+    wanted = EXT.get(quality)
     produced = sorted(
-        (p for p in siblings() if p.suffix != ".part"),
+        (p for p in siblings() if p.suffix not in (".part", ".lrc")),
         key=lambda p: (p.suffix != wanted, -p.stat().st_size),
     )
     if not produced:

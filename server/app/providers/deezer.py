@@ -9,11 +9,12 @@ from typing import Any
 import httpx
 
 from ..config import DEEZER_API, SEARCH_LIMIT
-from ..models import Album, AlbumDetail, Playlist, SearchResults, Track
+from ..models import Album, AlbumDetail, Artist, ArtistDetail, Playlist, SearchResults, Track
 
 ALBUM_URL = re.compile(r"deezer\.com/(?:[a-z]{2}/)?album/(\d+)", re.I)
 PLAYLIST_URL = re.compile(r"deezer\.com/(?:[a-z]{2}/)?playlist/(\d+)", re.I)
 TRACK_URL = re.compile(r"deezer\.com/(?:[a-z]{2}/)?track/(\d+)", re.I)
+ARTIST_URL = re.compile(r"deezer\.com/(?:[a-z]{2}/)?artist/(\d+)", re.I)
 
 
 def _track(row: dict[str, Any], album_row: dict[str, Any] | None = None) -> Track:
@@ -61,6 +62,25 @@ def _playlist(row: dict[str, Any]) -> Playlist:
     )
 
 
+def _artist(row: dict[str, Any]) -> Artist:
+    albums = row.get("nb_album")
+    fans = row.get("nb_fan")
+    if albums:
+        subtitle = f"{albums} آلبوم"
+    elif fans:
+        subtitle = f"{fans:,} دنبال‌کننده"
+    else:
+        subtitle = "هنرمند"
+    return Artist(
+        id=f"deezer:artist:{row['id']}",
+        name=row.get("name") or "",
+        artworkUrl=row.get("picture_medium") or row.get("picture"),
+        source="deezer",
+        sourceUrl=row.get("link") or f"https://www.deezer.com/artist/{row['id']}",
+        subtitle=subtitle,
+    )
+
+
 async def _get(client: httpx.AsyncClient, path: str, **params: Any) -> dict[str, Any]:
     res = await client.get(f"{DEEZER_API}{path}", params=params)
     res.raise_for_status()
@@ -71,14 +91,18 @@ async def _get(client: httpx.AsyncClient, path: str, **params: Any) -> dict[str,
 
 
 async def search(client: httpx.AsyncClient, query: str) -> SearchResults:
-    tracks, playlists = await asyncio.gather(
+    # هر سه مستقل‌اند — سریالی زدنشان زمان جستجو را سه برابر می‌کند.
+    # هنرمند را از دیزر هم می‌گیریم چون برخلاف iTunes عکس دارد.
+    tracks, playlists, artists = await asyncio.gather(
         _get(client, "/search/track", q=query, limit=SEARCH_LIMIT),
         _get(client, "/search/playlist", q=query, limit=SEARCH_LIMIT),
+        _get(client, "/search/artist", q=query, limit=8),
     )
     return SearchResults(
         query=query,
         tracks=[_track(r) for r in tracks.get("data", []) if r.get("id")],
         playlists=[_playlist(r) for r in playlists.get("data", []) if r.get("id")],
+        artists=[_artist(r) for r in artists.get("data", []) if r.get("id")],
     )
 
 
@@ -116,6 +140,33 @@ async def playlist(client: httpx.AsyncClient, playlist_id: str) -> AlbumDetail |
     )
 
 
+async def artist(client: httpx.AsyncClient, artist_id: str) -> ArtistDetail | None:
+    head, top, albums = await asyncio.gather(
+        _get(client, f"/artist/{artist_id}"),
+        _get(client, f"/artist/{artist_id}/top", limit=25),
+        _get(client, f"/artist/{artist_id}/albums", limit=100),
+        return_exceptions=True,
+    )
+    if not isinstance(head, dict) or not head.get("id"):
+        return None
+
+    discography = (
+        [_album({**r, "artist": head}) for r in albums.get("data", []) if r.get("id")]
+        if isinstance(albums, dict)
+        else []
+    )
+    discography.sort(key=lambda a: a.year, reverse=True)
+
+    tracks = (
+        [_track(r) for r in top.get("data", []) if r.get("id")]
+        if isinstance(top, dict)
+        else []
+    )
+
+    base = _artist(head)
+    return ArtistDetail(**base.model_dump(), topTracks=tracks, albums=discography)
+
+
 def parse_url(url: str) -> tuple[str, str] | None:
     if m := ALBUM_URL.search(url):
         return "album", m.group(1)
@@ -123,4 +174,6 @@ def parse_url(url: str) -> tuple[str, str] | None:
         return "playlist", m.group(1)
     if m := TRACK_URL.search(url):
         return "track", m.group(1)
+    if m := ARTIST_URL.search(url):
+        return "artist", m.group(1)
     return None

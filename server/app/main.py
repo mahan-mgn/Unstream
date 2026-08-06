@@ -15,27 +15,33 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 
-from . import catalog, ydl
+from . import catalog, db, jobs, verify, ydl
 from .config import (
     AUDIO_SOURCES,
     DOWNLOAD_DIR,
     FFMPEG_LOCATION,
+    FILE_RETENTION_SECONDS,
     HTTP_TIMEOUT,
     JS_RUNTIME,
+    LYRICS_ENABLED,
 )
 from .downloader import safe_name
 from .jobs import TERMINAL, manager
 from .models import (
     AlbumDetail,
+    ArtistDetail,
     DownloadAccepted,
     DownloadRequest,
+    LibraryItem,
+    LibraryPage,
     SearchResults,
     Track,
     ZipReady,
     ZipRequest,
 )
+from .providers import spotify
 
-USER_AGENT = "Unstream/0.1 (+local)"
+USER_AGENT = "Unstream/0.2 (+local)"
 
 
 @asynccontextmanager
@@ -45,8 +51,18 @@ async def lifespan(app: FastAPI):
         headers={"user-agent": USER_AGENT},
         follow_redirects=True,
     )
+
+    db.connect()
+    # کاری که موقع خاموش شدن سرور نیمه‌کاره مانده هیچ‌وقت خودش تمام نمی‌شود
+    db.mark_interrupted()
+    await asyncio.to_thread(jobs.sweep_disk)
+    sweeper = asyncio.create_task(jobs.sweep_loop())
+
     yield
+
+    sweeper.cancel()
     await app.state.http.aclose()
+    db.close()
 
 
 app = FastAPI(title="Unstream API", lifespan=lifespan)
@@ -71,6 +87,13 @@ async def health() -> dict:
             "cookies": ydl.has_cookies(),
             "poToken": ydl.has_potoken(),
             "jsRuntime": JS_RUNTIME or False,
+        },
+        # این‌ها اختیاری‌اند و نبودنشان فقط قابلیت را خاموش می‌کند، نه سرور را
+        "features": {
+            "lyrics": LYRICS_ENABLED,
+            "spotify": spotify.enabled(),
+            "acoustid": verify.available(),
+            "fileRetentionDays": round(FILE_RETENTION_SECONDS / 86400, 1),
         },
     }
 
@@ -98,11 +121,60 @@ async def album(ref: str, request: Request) -> AlbumDetail:
     return detail
 
 
+@app.get("/api/artist", response_model=ArtistDetail)
+async def artist(ref: str, request: Request) -> ArtistDetail:
+    try:
+        detail = await catalog.resolve_artist(request.app.state.http, ref)
+    except Exception as exc:
+        raise HTTPException(502, f"دریافت هنرمند ناموفق بود: {exc}") from exc
+    if detail is None:
+        raise HTTPException(404, "این هنرمند پیدا نشد")
+    return detail
+
+
 @app.post("/api/downloads", response_model=DownloadAccepted)
 async def create_download(req: DownloadRequest, request: Request) -> DownloadAccepted:
     track = await _track_for(request, req)
-    job = manager.create(track, req.quality)
-    return DownloadAccepted(jobId=job.id)
+    job, reused = manager.create(track, req.quality)
+    return DownloadAccepted(jobId=job.id, reused=reused)
+
+
+# ---------- کتابخانه ----------
+
+
+def _library_item(row) -> LibraryItem:
+    return LibraryItem(
+        jobId=row["id"],
+        track=Track.model_validate_json(row["track_json"]),
+        quality=row["quality"],
+        format=row["format"],
+        bytes=int(row["bytes"] or 0),
+        fileUrl=jobs.file_url(row["id"]),
+        lyricsUrl=jobs.lyrics_url(row["id"]) if row["lyrics_path"] else None,
+        createdAt=float(row["created_at"]),
+    )
+
+
+@app.get("/api/library", response_model=LibraryPage)
+async def library(q: str = "", limit: int = 50, offset: int = 0) -> LibraryPage:
+    limit = max(1, min(limit, 200))
+    rows, total, total_bytes = await asyncio.to_thread(
+        db.library, q, limit, max(0, offset)
+    )
+    # ردیفی که فایلش دیگر نیست نباید در کتابخانه دیده شود
+    items = [
+        _library_item(row)
+        for row in rows
+        if row["path"] and Path(row["path"]).exists()
+    ]
+    return LibraryPage(items=items, total=total, totalBytes=total_bytes)
+
+
+@app.delete("/api/library/{job_id}")
+async def library_delete(job_id: str) -> dict:
+    if not manager.forget(job_id):
+        raise HTTPException(404, "این مورد در کتابخانه نبود")
+    return {"ok": True}
 
 
 # آرشیوهای ساخته‌شده: token -> (مسیر، نام فایل، زمان ساخت)
@@ -140,6 +212,9 @@ async def create_zip(req: ZipRequest) -> ZipReady:
             continue
         seen.add(job.path.name)
         files.append(job.path)
+        # متن هم‌زمان‌شده کنار فایل صوتی می‌رود تا پلیرها خودشان پیدایش کنند
+        if job.lyrics_path and job.lyrics_path.exists():
+            files.append(job.lyrics_path)
 
     if not files:
         raise HTTPException(404, "هیچ فایل آماده‌ای برای بسته‌بندی نبود")
@@ -227,6 +302,18 @@ async def download_file(job_id: str) -> FileResponse:
     )
 
 
+@app.get("/api/downloads/{job_id}/lyrics")
+async def download_lyrics(job_id: str) -> FileResponse:
+    job = manager.get(job_id)
+    if job is None or job.lyrics_path is None or not job.lyrics_path.exists():
+        raise HTTPException(404, "متن هم‌زمان‌شده‌ای برای این آهنگ نیست")
+    return FileResponse(
+        job.lyrics_path,
+        filename=job.lyrics_path.name,
+        media_type="text/plain; charset=utf-8",
+    )
+
+
 async def _track_for(request: Request, req: DownloadRequest) -> Track:
     """
     فرانت فقط trackId و sourceUrl می‌فرستد. اگر متادیتا همراهش آمده باشد از آن
@@ -255,6 +342,7 @@ def _source_of(track_id: str) -> str:
     return {
         "itunes": "apple",
         "deezer": "deezer",
+        "sp": "spotify",
         "yt": "youtube",
         "sc": "soundcloud",
     }.get(prefix, "youtube")
@@ -282,6 +370,10 @@ async def _lookup_track(request: Request, req: DownloadRequest) -> Track | None:
                 from .providers.deezer import _track
 
                 return _track(row)
+        elif provider == "sp" and spotify.enabled():
+            detail = await spotify.track(client, ident)
+            if detail and detail.tracks:
+                return detail.tracks[0]
         elif provider in ("yt", "sc"):
             detail = await catalog.resolve_ref(client, req.sourceUrl)
             if detail and detail.tracks:

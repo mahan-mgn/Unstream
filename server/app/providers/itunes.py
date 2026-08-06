@@ -9,7 +9,7 @@ from typing import Any
 import httpx
 
 from ..config import ITUNES_API, SEARCH_LIMIT
-from ..models import Album, AlbumDetail, Artist, SearchResults, Track
+from ..models import Album, AlbumDetail, Artist, ArtistDetail, SearchResults, Track
 
 # https://music.apple.com/us/album/mard-e-tanha/1801042661?i=1801042670
 ALBUM_URL = re.compile(r"music\.apple\.com/[^/]+/album/[^/]*/(\d+)", re.I)
@@ -106,6 +106,31 @@ async def album(client: httpx.AsyncClient, collection_id: str) -> AlbumDetail | 
     )
 
 
+async def artist(client: httpx.AsyncClient, artist_id: str) -> ArtistDetail | None:
+    """صفحه‌ی هنرمند: دیسکوگرافی به‌علاوه‌ی ترک‌های شناخته‌شده‌اش."""
+    albums, songs = await asyncio.gather(
+        _get(client, "/lookup", id=artist_id, entity="album", limit=100),
+        _get(client, "/lookup", id=artist_id, entity="song", limit=25),
+    )
+
+    head = next((r for r in albums if r.get("wrapperType") == "artist"), None)
+    if head is None:
+        return None
+
+    discography = [_album(r) for r in albums if r.get("collectionId")]
+    discography.sort(key=lambda a: a.year, reverse=True)
+    top = [_track(r) for r in songs if r.get("trackId")]
+
+    base = _artist(head)
+    return ArtistDetail(
+        **base.model_dump(exclude={"artworkUrl"}),
+        # iTunes Search عکس هنرمند نمی‌دهد؛ کاور تازه‌ترین آلبوم نزدیک‌ترین چیز است
+        artworkUrl=next((a.artworkUrl for a in discography if a.artworkUrl), None),
+        topTracks=top,
+        albums=discography,
+    )
+
+
 def parse_url(url: str) -> tuple[str, str] | None:
     """('album', id) اگر لینک اپل‌موزیک باشد."""
     if m := ALBUM_URL.search(url):
@@ -115,4 +140,4 @@ def parse_url(url: str) -> tuple[str, str] | None:
     return None
 
 
-__all__ = ["search", "album", "parse_url", "artwork"]
+__all__ = ["search", "album", "artist", "parse_url", "artwork"]
