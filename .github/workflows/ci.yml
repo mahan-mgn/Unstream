@@ -39,8 +39,9 @@ jobs:
           python-version: "3.13"
           cache: pip
           cache-dependency-path: server/requirements*.txt
-      # ffmpeg روی ubuntu-latest از قبل نصب است — تست‌های artblur/mood/loudness
-      # به آن نیاز دارند و بدونش skip می‌شوند، پس CI سبزِ کاذب نمی‌دهد.
+      # تست‌های artblur/artborder/mood/loudness مستقیم ffmpeg صدا می‌زنند؛
+      # runner اوبونتو از قبل ندارد.
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - run: pip install -r requirements-dev.txt
       # conftest خودش UNSTREAM_ENV_NO_FILES=1 می‌گذارد — هیچ .env توسعه‌دهنده
       # یا کلید واقعی در CI خوانده نمی‌شود.
