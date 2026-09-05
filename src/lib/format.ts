@@ -10,12 +10,21 @@ export function digits(input: string | number, lang: string): string {
   return lang === 'fa' ? fa(input) : String(input)
 }
 
-/** ۳:۴۵ */
+/** ۳:۴۵ — و برای چیزی که از یک ساعت رد می‌شود، ۱:۱۲:۳۰ */
 export function duration(ms: number, lang = 'fa'): string {
-  const total = Math.round(ms / 1000)
-  const m = Math.floor(total / 60)
+  // مدت‌زمانِ نامعلوم (NaN از `<audio>`ِ هنوز بارنشده) یا منفی نباید به شکل
+  // «NaN:NaN» روی نوار پخش بنشیند
+  const total = Number.isFinite(ms) ? Math.max(0, Math.round(ms / 1000)) : 0
+  const h = Math.floor(total / 3600)
+  const m = Math.floor(total / 60) % 60
   const s = total % 60
-  return digits(`${m}:${String(s).padStart(2, '0')}`, lang)
+  // بخشِ ساعت فقط وقتی می‌آید که واقعاً باشد: «۰:۰۳:۴۵» برای یک آهنگ نویز
+  // است، ولی بدونش میکسِ دوساعته «۱۲۰:۰۰» نشان داده می‌شد — که نه ساعت است
+  // نه دقیقه، و روی نوار پخشِ همان میکس هم دیده می‌شود نه فقط در تکه‌کردن.
+  const text = h
+    ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    : `${m}:${String(s).padStart(2, '0')}`
+  return digits(text, lang)
 }
 
 export function percent(n: number, lang = 'fa'): string {
@@ -25,6 +34,34 @@ export function percent(n: number, lang = 'fa'): string {
 /** تشخیص اینکه ورودی کاربر لینک است یا عبارت جستجو */
 export function isUrl(value: string): boolean {
   return /^https?:\/\//i.test(value.trim())
+}
+
+/**
+ * لینکِ صفحه‌ی هنرمند یا کاربر — هر چیزی که به `/api/artist` می‌رود، نه
+ * `/api/album`.
+ *
+ * بدونش هر لینکِ پیست‌شده به `/api/album` می‌رفت، حتی لینک هنرمند — که آنجا
+ * شناخته نمی‌شود و ۴۰۴ می‌گیرد.
+ *
+ * «کاربر» هم همان‌جا می‌رود: صفحه‌ی کسی که هنرمند نیست و فقط پلی‌لیستِ عمومی
+ * دارد (اسپاتیفای `user/`، دیزر `profile/`) همان قالبِ صفحه‌ی هنرمند را دارد.
+ *
+ * ساندکلاد و یوتیوب بخشِ ثابتی برای «هنرمند» ندارند و از روی شکلِ کلِ آدرس
+ * تشخیص داده می‌شوند: پروفایلِ ساندکلاد دقیقاً یک بخش دارد (ترک و ست بیشتر
+ * دارند) و کانالِ یوتیوب با `@`/`channel`/`c`/`user` شروع می‌شود و نه با
+ * `watch` یا `playlist`.
+ */
+export function isArtistUrl(value: string): boolean {
+  const url = value.trim()
+  return (
+    /music\.apple\.com\/[a-z]{2}\/artist\//i.test(url) ||
+    /deezer\.com\/(?:[a-z]{2}\/)?(?:artist|profile)\//i.test(url) ||
+    /open\.spotify\.com\/(?:intl-[a-z]{2}\/)?(?:artist|user)\//i.test(url) ||
+    /^https?:\/\/(?:www\.|m\.)?soundcloud\.com\/[\w.-]+\/?(?:[?#].*)?$/i.test(url) ||
+    /^https?:\/\/(?:www\.|m\.)?youtube\.com\/(?:@[\w.-]+|channel\/[\w-]+|c\/[\w.-]+|user\/[\w.-]+)(?:\/[a-z]+)?\/?(?:[?#].*)?$/i.test(
+      url,
+    )
+  )
 }
 
 /** نام فایل امن برای ذخیره‌سازی */
@@ -78,6 +115,19 @@ export function shortDate(seconds: number, lang = 'fa'): string {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
+    })
+  } catch {
+    return ''
+  }
+}
+
+/** ساعت و دقیقه — «۲۱:۴۰» — برای «آخرین پخش‌ها» کنارِ تاریخ */
+export function clock(seconds: number, lang = 'fa'): string {
+  const locale = lang === 'fa' ? 'fa-IR' : 'en-US'
+  try {
+    return new Date(seconds * 1000).toLocaleTimeString(locale, {
+      hour: '2-digit',
+      minute: '2-digit',
     })
   } catch {
     return ''

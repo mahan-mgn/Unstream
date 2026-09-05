@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  آیکونِ کوچکِ نوار وضعیت.
+
+  اندروید این یکی را ماسک می‌کند: فقط شکل و آلفا می‌ماند و رنگ را خودش
+  می‌گذارد. پس عمداً تک‌رنگِ سفید و بدونِ پس‌زمینه است — همان لوگوی هدفون،
+  بدون قابِ مشکی و بدون رنگِ اکسنت که در نوار وضعیت به یک لکه‌ی سفید تبدیل
+  می‌شدند.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+
+    <path
+        android:pathData="M144,296v-40a112,112 0 0 1 224,0v40"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="30"
+        android:strokeLineCap="round" />
+
+    <path
+        android:pathData="M118,312a24,24 0 0 1 24,-24h16a24,24 0 0 1 24,24v48a24,24 0 0 1 -24,24h-16a24,24 0 0 1 -24,-24z"
+        android:fillColor="#FFFFFF" />
+
+    <path
+        android:pathData="M330,312a24,24 0 0 1 24,-24h16a24,24 0 0 1 24,24v48a24,24 0 0 1 -24,24h-16a24,24 0 0 1 -24,-24z"
+        android:fillColor="#FFFFFF" />
+</vector>

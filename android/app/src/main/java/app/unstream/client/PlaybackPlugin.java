@@ -1,0 +1,124 @@
+package app.unstream.client;
+
+import android.Manifest;
+import android.content.Intent;
+import android.os.Build;
+
+import com.getcapacitor.JSObject;
+import com.getcapacitor.PluginCall;
+import com.getcapacitor.PluginMethod;
+import com.getcapacitor.Plugin;
+import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
+
+/**
+ * پلِ بینِ پخش‌کننده‌ی جاوااسکریپتی و {@link PlaybackService}.
+ *
+ * جهتِ رفت: هر تغییرِ ترک یا وضعیت از JS با `sync` می‌آید و نوتیفیکیشن را
+ * به‌روز می‌کند. جهتِ برگشت: هر دکمه‌ای که روی نوتیفیکیشن یا صفحه‌ی قفل یا
+ * هدفون زده شود، به‌شکلِ رویدادِ `transport` به JS می‌رسد.
+ *
+ * عمداً یک لایه‌ی نازک است: هیچ منطقِ پخشی اینجا نیست، چون منطق (صف، شافل،
+ * تکرار، رادیو) همه در `store/player.ts` است و دوتا شدنش یعنی دو رفتارِ
+ * متفاوت که دیر یا زود از هم واگرا می‌شوند.
+ */
+@CapacitorPlugin(
+        name = "Playback",
+        permissions = {
+                @Permission(alias = "notifications", strings = { Manifest.permission.POST_NOTIFICATIONS })
+        }
+)
+public class PlaybackPlugin extends Plugin {
+
+    @Override
+    public void load() {
+        PlaybackService.setListener((action, value) -> {
+            JSObject event = new JSObject();
+            event.put("action", action);
+            // فقط `seek` مقدار دارد؛ بقیه صفر می‌فرستند و JS نگاهش نمی‌کند
+            event.put("value", value / 1000.0);
+            notifyListeners("transport", event);
+        });
+    }
+
+    /**
+     * وضعیتِ فعلی را روی نوتیفیکیشن می‌نشاند و در صورت لزوم سرویس را بالا
+     * می‌آورد. زمان‌ها از JS به ثانیه می‌آیند و اینجا میلی‌ثانیه می‌شوند، چون
+     * قراردادِ `MediaSession` اندروید میلی‌ثانیه است.
+     */
+    @PluginMethod
+    public void sync(PluginCall call) {
+        Intent intent = new Intent(getContext(), PlaybackService.class);
+        intent.setAction(PlaybackService.ACTION_SYNC);
+        intent.putExtra("title", call.getString("title", ""));
+        intent.putExtra("artist", call.getString("artist", ""));
+        intent.putExtra("album", call.getString("album", ""));
+        intent.putExtra("artworkUrl", call.getString("artworkUrl", ""));
+        intent.putExtra("playing", Boolean.TRUE.equals(call.getBoolean("playing", false)));
+        intent.putExtra("position", (long) (call.getDouble("position", 0.0) * 1000));
+        intent.putExtra("duration", (long) (call.getDouble("duration", 0.0) * 1000));
+
+        /*
+         * `startForegroundService` فقط وقتی مجاز است که اپ دیده شود یا سرویس
+         * قبلاً پیش‌زمینه باشد؛ از اندروید ۱۲ به بعد صدا زدنش از پس‌زمینه
+         * استثنا پرت می‌کند. همیشه در واکنش به کنشِ کاربر صدا زده می‌شود، ولی
+         * یک حالتِ مرزی هست: مکث از خودِ نوتیفیکیشن وقتی اپ پس‌زمینه است.
+         * آن استثنا نباید پخش را بترکاند، پس بی‌صدا رد می‌شود.
+         */
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                getContext().startForegroundService(intent);
+            } else {
+                getContext().startService(intent);
+            }
+        } catch (Exception ignored) {
+            // نوتیفیکیشن به‌روز نشد؛ خودِ پخش دست‌نخورده ادامه دارد
+        }
+
+        call.resolve();
+    }
+
+    /** پخش بسته شد — نوتیفیکیشن و سرویس هر دو می‌روند */
+    @PluginMethod
+    public void stop(PluginCall call) {
+        Intent intent = new Intent(getContext(), PlaybackService.class);
+        intent.setAction(PlaybackService.ACTION_STOP);
+        try {
+            getContext().startService(intent);
+        } catch (Exception ignored) {
+            // سرویس از قبل مرده بود
+        }
+        call.resolve();
+    }
+
+    /**
+     * از اندروید ۱۳ نوتیفیکیشن اجازه‌ی زمانِ‌اجرا می‌خواهد. بدونش پخش کار
+     * می‌کند ولی نوتیفیکیشنِ مدیا نامرئی است — و چون سرویسِ پیش‌زمینه
+     * نوتیفیکیشنِ قابل‌نمایش ندارد، اندروید بعد از مدتی پروسه را می‌کشد.
+     */
+    @PluginMethod
+    public void ensurePermission(PluginCall call) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            call.resolve(granted(true));
+            return;
+        }
+        if (getPermissionState("notifications") == com.getcapacitor.PermissionState.GRANTED) {
+            call.resolve(granted(true));
+            return;
+        }
+        requestPermissionForAlias("notifications", call, "permissionResult");
+    }
+
+    @PermissionCallback
+    private void permissionResult(PluginCall call) {
+        call.resolve(granted(
+                getPermissionState("notifications") == com.getcapacitor.PermissionState.GRANTED));
+    }
+
+    private static JSObject granted(boolean value) {
+        JSObject result = new JSObject();
+        result.put("granted", value);
+        return result;
+    }
+}

@@ -8,7 +8,7 @@ export function ResultsSkeleton() {
       <section className="space-y-3">
         <Bar className="h-3 w-24" />
         <div className="flex items-center gap-3">
-          <Bar className="size-14 rounded-lg" />
+          <Bar className="size-14 shrink-0 rounded-lg" />
           <div className="flex-1 space-y-2">
             <Bar className="h-3 w-1/3" />
             <Bar className="h-2.5 w-1/5" />
@@ -16,7 +16,7 @@ export function ResultsSkeleton() {
         </div>
         {[0, 1, 2, 3].map((i) => (
           <div key={i} className="flex items-center gap-3">
-            <Bar className="size-10 rounded-lg" />
+            <Bar className="size-10 shrink-0 rounded-lg" />
             <div className="flex-1 space-y-2">
               <Bar className="h-2.5" style={{ width: `${45 + i * 8}%` }} />
               <Bar className="h-2 w-1/6" />
@@ -27,7 +27,7 @@ export function ResultsSkeleton() {
 
       <section className="space-y-3">
         <Bar className="h-3 w-20" />
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
             <div key={i} className="space-y-2">
               <Bar className="aspect-square rounded-lg" />
@@ -44,19 +44,19 @@ export function ResultsSkeleton() {
 export function AlbumSkeleton() {
   return (
     <div className="rise space-y-4 rounded-2xl border border-line-soft bg-panel/50 p-4">
-      <div className="flex items-center gap-4">
-        <Bar className="size-20 rounded-xl" />
-        <div className="flex-1 space-y-2">
-          <Bar className="h-4 w-40" />
-          <Bar className="h-2.5 w-56" />
+      <div className="flex items-center gap-3 sm:gap-4">
+        <Bar className="size-16 shrink-0 rounded-xl sm:size-20" />
+        <div className="min-w-0 flex-1 space-y-2">
+          <Bar className="h-4 w-2/3" />
+          <Bar className="h-2.5 w-full" />
         </div>
-        <Bar className="h-9 w-28 rounded-full" />
+        <Bar className="hidden h-9 w-28 shrink-0 rounded-full md:block" />
       </div>
       {Array.from({ length: 8 }, (_, i) => (
         <div key={i} className="flex items-center gap-3">
-          <Bar className="size-10 rounded-lg" />
-          <Bar className="h-2.5 flex-1" />
-          <Bar className="h-2.5 w-10" />
+          <Bar className="size-10 shrink-0 rounded-lg" />
+          <Bar className="h-2.5 min-w-0 flex-1" />
+          <Bar className="h-2.5 w-10 shrink-0" />
         </div>
       ))}
     </div>

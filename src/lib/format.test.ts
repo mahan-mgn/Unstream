@@ -6,6 +6,7 @@ import {
   fa,
   fileExt,
   formatLabel,
+  isArtistUrl,
   isUrl,
   percent,
   safeFilename,
@@ -39,9 +40,24 @@ describe('duration', () => {
     expect(duration(59_600, 'en')).toBe('1:00')
   })
 
-  it('handles durations over an hour without breaking', () => {
-    // ساعت جدا نمی‌شود — برای یک ترک هیچ‌وقت لازم نبوده
-    expect(duration(3_720_000, 'en')).toBe('62:00')
+  it('splits out the hour once there is one', () => {
+    // فرضِ قبلی «برای یک ترک هیچ‌وقت لازم نیست» بود و درست هم بود — تا وقتی
+    // که تکه‌کردنِ میکس اضافه شد. آن قابلیت دقیقاً برای ویدیوی دو ساعته است و
+    // نوار پخش هم همان میکس را نشان می‌دهد، جایی که «۱۲۰:۰۰» نه ساعت خوانده
+    // می‌شود نه دقیقه.
+    expect(duration(3_720_000, 'en')).toBe('1:02:00')
+    expect(duration(7_200_000, 'en')).toBe('2:00:00')
+  })
+
+  it('stays under a minute-only format below an hour', () => {
+    // «۰:۰۳:۴۵» برای یک آهنگ نویز است
+    expect(duration(3_599_000, 'en')).toBe('59:59')
+  })
+
+  it('does not render NaN or negative input', () => {
+    // مدت‌زمانِ `<audio>`ِ هنوز بارنشده NaN است و مستقیم به نوار پخش می‌رفت
+    expect(duration(NaN, 'en')).toBe('0:00')
+    expect(duration(-5000, 'en')).toBe('0:00')
   })
 
   it('uses persian digits by default', () => {
@@ -71,6 +87,38 @@ describe('isUrl', () => {
       expect(isUrl(value)).toBe(false)
     },
   )
+})
+
+describe('isArtistUrl', () => {
+  it.each([
+    'https://music.apple.com/us/artist/farhad/500',
+    'https://www.deezer.com/en/artist/42',
+    'https://open.spotify.com/artist/6jj9lOTeZC28LkPoXK9hiT',
+    // صفحه‌ی کاربر هم همان‌جا می‌رود: قالبش صفحه‌ی هنرمند است، با پلی‌لیست
+    // به‌جای دیسکوگرافی
+    'https://open.spotify.com/user/31qajthebaf2bgwqnanhyrdpplte?si=ec90',
+    'https://open.spotify.com/intl-fa/user/mahan.mgn',
+    'https://www.deezer.com/en/profile/2529',
+    'https://soundcloud.com/accia',
+    'https://www.youtube.com/@NoCopyrightSounds/playlists',
+    'https://www.youtube.com/channel/UC_aEa8K-EOJ3D6gOs7HcyNg',
+  ])('sends %s to the artist page', (value) => {
+    expect(isArtistUrl(value)).toBe(true)
+  })
+
+  it.each([
+    'https://open.spotify.com/album/1A2B',
+    'https://open.spotify.com/playlist/37i9dQ',
+    'https://www.deezer.com/fa/playlist/999',
+    // ساندکلاد و یوتیوب بخشِ ثابتی برای «هنرمند» ندارند و فقط از روی شکلِ کلِ
+    // آدرس تشخیص داده می‌شوند — ترک و ست و ویدیو نباید اینجا بیفتند
+    'https://soundcloud.com/dorcci/gonah',
+    'https://soundcloud.com/accia/sets/porrprogg',
+    'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    'https://www.youtube.com/playlist?list=PL123',
+  ])('leaves %s on the album route', (value) => {
+    expect(isArtistUrl(value)).toBe(false)
+  })
 })
 
 describe('safeFilename', () => {

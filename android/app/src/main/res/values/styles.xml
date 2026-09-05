@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Base application theme. -->
+    <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
+        <!-- Customize your theme here. -->
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorAccent">@color/colorAccent</item>
+    </style>
+
+    <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:background">@null</item>
+        <!--
+          نوارهای سیستم شفاف‌اند و محتوا زیرشان کشیده می‌شود (`MainActivity`).
+          بدون این دو، اندروید پشتِ نوارِ ناوبری یک نوارِ نیمه‌شفافِ خودش
+          می‌گذارد و لبه‌تاـلبه بودن نصفه می‌ماند.
+        -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">@color/splash_background</item>
+    </style>
+
+    <!--
+      صفحه‌ی شروع.
+
+      از اندروید ۱۲ این صفحه را سیستم می‌کشد و فقط سه چیز از اپ می‌گیرد: رنگِ
+      پس‌زمینه، آیکونِ وسط، و تمی که بعدش باید بنشیند. قبلاً اینجا فقط یک
+      `android:background` بود؛ نتیجه‌اش این بود که روی گوشی‌های جدید سیستم
+      همان آیکونِ لانچر (با قابِ گردگوشه‌اش) را وسط صفحه بزرگ می‌کرد و بعد یک
+      پرشِ ناگهانی به رابط می‌خورد.
+
+      `postSplashScreenTheme` همان چیزی است که نبودش باعث می‌شد بعد از رفتنِ
+      اسپلش، اکتیویتی با تمِ اسپلش بماند.
+    -->
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_icon</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
+        <!-- گوشی‌های پیش از اندروید ۱۲ که از API بالا چیزی نمی‌دانند -->
+        <item name="android:background">@drawable/splash</item>
+    </style>
+</resources>

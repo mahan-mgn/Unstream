@@ -8,6 +8,9 @@ dist/
 # اسکرین‌رکورد‌ها و هر ویدیوی محلی — نباید در مخزن باشند
 *.mp4
 
+# لاگ‌های اجرا — جدا از حجمشان، خروجیِ بات ممکن است توکن داشته باشد
+*.log
+
 # خروجی tsc -b
 *.tsbuildinfo
 
@@ -16,6 +19,9 @@ server/.venv/
 **/__pycache__/
 server/downloads/
 server/.env
+# `.env` ریشه را compose می‌خواند و کلیدهای واقعی داکر داخلش می‌رود. بیرون از
+# این لیست بود و `git add .` آن را با کلیدها بیرون می‌داد.
+.env
 server/data/
 .pytest_cache/
 .coverage
@@ -26,3 +32,14 @@ server/vendor/
 # کوکی و کلیدهایی که به داکر سوار می‌شوند
 secrets/*
 !secrets/.gitkeep
+
+# APK ساخته‌شده‌ی اندروید — خروجی بیلد است، نه سورس
+*.apk
+
+# وضعیت ماشین‌محلیِ ابزارها (Spec Kit / Claude / Hermes) — سهم‌گذاری نمی‌شود
+.claude/
+.hermes/
+.specify/
+
+# موکاپ‌های دورریختنیِ طراحی — محصول نیستند
+sketches/

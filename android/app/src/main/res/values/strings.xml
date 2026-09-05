@@ -1,0 +1,17 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">آنستریم</string>
+    <string name="title_activity_main">آنستریم</string>
+    <string name="package_name">app.unstream.client</string>
+    <string name="custom_url_scheme">app.unstream.client</string>
+
+    <!-- کانالِ نوتیفیکیشنِ پخش — کاربر از تنظیمات اندروید با همین نام می‌بیندش -->
+    <string name="channel_playback">پخش موسیقی</string>
+    <string name="channel_playback_desc">کنترل پخش روی نوار اعلان و صفحه‌ی قفل</string>
+
+    <!-- برچسب‌های دکمه‌های نوتیفیکیشن: صفحه‌خوان همین‌ها را می‌خواند -->
+    <string name="media_play">پخش</string>
+    <string name="media_pause">مکث</string>
+    <string name="media_next">بعدی</string>
+    <string name="media_prev">قبلی</string>
+</resources>

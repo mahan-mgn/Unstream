@@ -1,36 +1,93 @@
 import { create } from 'zustand'
+import { engine, MAX_BOOST_DB, type EqPreset } from '../lib/audioEngine'
+import { syncStatusBar } from '../lib/native'
+import { readStored, readStoredAs, readStoredNumber, writeStored } from '../lib/storage'
 import type { Quality } from '../lib/types'
 
 type Theme = 'dark' | 'light'
 
+/** بیشترین کراس‌فیدِ مجاز (ثانیه) — بالاتر از این، دو ترک روی هم می‌مانند نه محو */
+export const MAX_CROSSFADE = 12
+
 interface SettingsState {
   quality: Quality
   theme: Theme
+  /** هم‌ترازیِ بلندیِ ترک‌ها با گِینی که سرور اندازه گرفته */
+  normalize: boolean
+  /** ثانیه؛ صفر یعنی خاموش */
+  crossfade: number
+  eq: EqPreset
+  /** تقویتِ سراسریِ صدا به دسی‌بل — برای گوشی‌هایی که صدایشان کم است */
+  boost: number
   setQuality: (q: Quality) => void
   toggleTheme: () => void
+  setNormalize: (on: boolean) => void
+  setCrossfade: (seconds: number) => void
+  setEq: (preset: EqPreset) => void
+  setBoost: (db: number) => void
 }
-
-const read = <T extends string>(key: string, fallback: T): T =>
-  (localStorage.getItem(key) as T | null) ?? fallback
 
 function applyTheme(theme: Theme) {
   document.documentElement.dataset.theme = theme
-  localStorage.setItem('theme', theme)
+  writeStored('theme', theme)
+  // نوار وضعیت شفاف است و روی خودِ محتوا می‌افتد؛ اگر رنگِ آیکون‌هایش با تم
+  // عوض نشود، در تمِ روشن ساعتِ سفید روی پس‌زمینه‌ی سفید ناپدید می‌شود
+  syncStatusBar(theme)
 }
 
-const initialTheme = read<Theme>('theme', 'dark')
+/*
+ * در سطحِ ماژول خوانده می‌شود، پس نباید بتواند پرت کند — `readStoredAs` روی
+ * مرورگری که ذخیره‌سازیِ سایت را بسته به پیش‌فرض برمی‌گردد به‌جای اینکه
+ * بارگذاریِ اپ را متوقف کند.
+ */
+const initialTheme: Theme = readStoredAs<Theme>('theme', 'dark') === 'light' ? 'light' : 'dark'
 applyTheme(initialTheme)
 
+// پیش‌فرضِ نرمال‌سازی روشن است: بدون آن اولین چیزی که کاربر از یک صفِ مخلوط
+// می‌شنود همان جهش‌های صداست. کراس‌فید ولی خاموش می‌ماند — روی آلبومی که خودش
+// گپلس است، محوکردنِ ترک‌ها چیزی را خراب می‌کند که درست بوده.
 export const useSettings = create<SettingsState>((set, get) => ({
-  quality: read<Quality>('quality', '320'),
+  quality: readStoredAs<Quality>('quality', '320'),
   theme: initialTheme,
+  normalize: readStored('audio:normalize') !== '0',
+  crossfade: readStoredNumber('audio:crossfade', 0, { max: MAX_CROSSFADE }),
+  eq: readStoredAs<EqPreset>('audio:eq', 'off'),
+  boost: readStoredNumber('audio:boost', 0, { min: 0, max: MAX_BOOST_DB }),
+
   setQuality: (quality) => {
-    localStorage.setItem('quality', quality)
+    writeStored('quality', quality)
     set({ quality })
   },
+
   toggleTheme: () => {
     const theme = get().theme === 'dark' ? 'light' : 'dark'
     applyTheme(theme)
     set({ theme })
+  },
+
+  setNormalize: (on) => {
+    writeStored('audio:normalize', on ? '1' : '0')
+    engine.setNormalize(on)
+    set({ normalize: on })
+  },
+
+  setCrossfade: (seconds) => {
+    const value = Math.max(0, Math.min(MAX_CROSSFADE, Math.round(seconds)))
+    writeStored('audio:crossfade', String(value))
+    engine.setCrossfade(value)
+    set({ crossfade: value })
+  },
+
+  setEq: (preset) => {
+    writeStored('audio:eq', preset)
+    engine.setEq(preset)
+    set({ eq: preset })
+  },
+
+  setBoost: (db) => {
+    const value = Math.max(0, Math.min(MAX_BOOST_DB, Math.round(db)))
+    writeStored('audio:boost', String(value))
+    engine.setBoost(value)
+    set({ boost: value })
   },
 }))

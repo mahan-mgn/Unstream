@@ -1,4 +1,14 @@
 @import 'tailwindcss';
+/*
+ * فونت داخل خودِ بسته، نه از CDN.
+ *
+ * قبلاً از jsdelivr می‌آمد؛ در مرورگر مشکلی نبود ولی داخل APK یعنی: اپی که
+ * ادعا می‌کند آفلاین بالا می‌آید، بدون اینترنت با فونت پیش‌فرضِ اندروید ظاهر
+ * می‌شد — و فونت پیش‌فرضِ اندروید برای فارسی تقریباً همیشه بد است. نسخه‌ی
+ * متغیر است تا همه‌ی وزن‌ها (۱۰۰ تا ۹۰۰) در یک فایل باشند: سه فایل، جمعاً
+ * حدود ۱۱۰ کیلوبایت، به‌جای هشت فایلِ جدا برای هر وزن.
+ */
+@import '@fontsource-variable/vazirmatn';
 
 :root,
 [data-theme='dark'] {
@@ -8,14 +18,25 @@
   --line: #232323;
   --line-soft: #1a1a1a;
   --fg: #f2f2f2;
-  --muted: #8b8b8b;
+  /* یک پله روشن‌تر از #8b8b8b: متادیتای هیرو و زیرنویس‌ها در تلویزیون/دور
+     خواناتر می‌شوند و هنوز از متنِ اصلی (--fg) یک سرِ پایین‌ترند */
+  --muted: #a3a3a3;
   --muted-2: #5f5f5f;
   --accent: #c6f24e;
   --accent-fg: #0d1a00;
   --accent-dim: #c6f24e29;
   --danger: #ff6b6b;
+  /* قرمزِ لایک — عمیق‌تر از --dangerِ مرجانی. --danger رنگِ «خطا» است و
+     تیره‌کردنش معنای هشدارها را عوض می‌کرد، پس قلب توکنِ خودش را دارد */
+  --like: #b91c1c;
   /* هشدار، نه خطا: فایل سالم است ولی تطابقش مشکوک */
   --warn: #e8b44a;
+  /*
+   * اکسنت دوم — فقط تزئینی (گرادیان‌ها، هاله‌ها)، هرگز روی اکشن‌ها.
+   * اکسنت اول یعنی «فعال/موفق»؛ اگر این یکی هم رنگ اکشن می‌شد آن معنا گم می‌شد.
+   */
+  --accent-2: #8a5cf6;
+  --accent-2-dim: #8a5cf629;
 }
 
 [data-theme='light'] {
@@ -25,13 +46,54 @@
   --line: #e2e2dd;
   --line-soft: #ececE7;
   --fg: #131313;
-  --muted: #6b6b6b;
+  /* متناظرِ تیره‌شده‌ی --muted: روشن‌تر از #6b6b6b برای خواناییِ بهتر */
+  --muted: #595959;
   --muted-2: #9a9a9a;
   --accent: #9fd117;
   --accent-fg: #0d1a00;
   --accent-dim: #9fd11726;
   --danger: #d64545;
+  /* متناظرِ تیره‌تر برای زمینه‌ی روشن */
+  --like: #991b1b;
   --warn: #b57c11;
+  --accent-2: #7c3aed;
+  --accent-2-dim: #7c3aed1f;
+}
+
+/*
+ * متغیرهای چیدمان — همه‌ی موقعیت‌های ثابت (هدر چسبان، نوار پخش، دکمه‌های
+ * شناور) از این‌ها می‌آیند تا یک‌جا درست بمانند.
+ *
+ * `env(safe-area-inset-*)` روی مرورگر دسکتاپ صفر است و هیچ اثری ندارد؛ روی
+ * آیفون (و اندرویدهای با ناچ) با `viewport-fit=cover` همان حاشیه‌ای است که
+ * نوار وضعیت و نوارِ خانه اشغال می‌کنند. بدونش در حالت PWA هدر زیر ساعت
+ * می‌رفت و نوار پخش زیر خطِ خانه گم می‌شد.
+ */
+:root {
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+
+  /* ارتفاع نوار پخش؛ صفر تا وقتی چیزی پخش نمی‌شود */
+  --player-h: 0px;
+  --header-h: calc(3.5rem + var(--safe-t));
+
+  /*
+   * ارتفاعِ کلِ تب‌بارِ پایین، با حاشیه‌ی امنش. روی دسکتاپ صفر است چون تب‌باری
+   * وجود ندارد — و همین صفر بودن باعث می‌شود بقیه‌ی فرمول‌ها (فاصله‌ی ته صفحه،
+   * جای نوار پخش، دکمه‌های شناور) بدونِ هیچ شرطی روی هر دو درست بمانند.
+   */
+  --tab-h: 0px;
+}
+
+@media (max-width: 639px) {
+  :root {
+    /* تب‌بار دیگر به لبه نچسبیده: کپسولِ شیشه‌ای ۳٫۵rem + فاصله‌ی تعلیقش از
+       پایین (max(0.75rem, safe-b)) = ارتفاعِ کلِ ناحیه‌ای که محتوا نباید زیرش
+       برود. همه‌ی فرمول‌های پایین از همین می‌آیند. */
+    --tab-h: calc(3.5rem + max(0.75rem, var(--safe-b)));
+  }
 }
 
 @theme inline {
@@ -47,14 +109,36 @@
   --color-accent-fg: var(--accent-fg);
   --color-accent-dim: var(--accent-dim);
   --color-danger: var(--danger);
+  --color-like: var(--like);
   --color-warn: var(--warn);
+  --color-accent-2: var(--accent-2);
+  --color-accent-2-dim: var(--accent-2-dim);
 
-  --font-sans: Vazirmatn, ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Vazirmatn Variable', Vazirmatn, ui-sans-serif, system-ui, sans-serif;
 }
 
 html {
   background: var(--bg);
   color-scheme: dark;
+  /*
+   * سافاریِ موبایل موقع چرخاندن گوشی به افقی، فونتِ بلوک‌های متنی را خودش
+   * بزرگ می‌کند — که یعنی چیدمانی که برای عرضِ افقی تنظیم شده دوباره می‌شکند.
+   */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /*
+   * بدون این، وقتی محتوای صفحه‌ی جدید بالای اسکرول جابه‌جا می‌شود (اسکلتون →
+   * محتوای واقعی با ارتفاع دیگر)، مرورگر خودش اسکرول را «جبران» می‌کند و
+   * ریست‌کردنِ صریح به بالای صفحه بعد از ناوبری را دوباره پایین می‌کشد.
+   */
+  overflow-anchor: none;
+  /*
+   * هیچ عنصری نباید عرضِ صفحه را بترکاند — مارکیِ لوگوها و شلف‌های کارتی
+   * عمداً از کادر بیرون می‌زنند و فقط باید بریده شوند، نه اسکرولِ افقی بسازند.
+   * `clip` نه `hidden`: hidden به عنصرِ اسکرول‌دارِ داخل اجازه نمی‌دهد با
+   * برنامه اسکرول بخورد، clip فقط بیرون‌زدگی را می‌بُرد.
+   */
+  overflow-x: clip;
 }
 [data-theme='light'] {
   color-scheme: light;
@@ -77,6 +161,44 @@ body {
   input {
     font: inherit;
     color: inherit;
+  }
+
+  /*
+   * `touch-action: manipulation` تأخیرِ ۳۰۰ میلی‌ثانیه‌ایِ «شاید دابل‌تپ باشد»
+   * را برمی‌دارد؛ بدونش هر دکمه روی موبایل یک لحظه کند حس می‌شود. هایلایتِ
+   * آبیِ پیش‌فرضِ لمس هم برداشته می‌شود چون خودمان حالتِ :active داریم.
+   */
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  [role='button'] {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  /*
+   * حلقه‌ی فوکوس — یک قاعده برای کلِ اپ.
+   *
+   * تا امروز فقط چند کامپوننتِ انگشت‌شمار حالتِ فوکوس داشتند و بقیه به
+   * `outline`ِ پیش‌فرضِ مرورگر تکیه می‌کردند، که روی پس‌زمینه‌ی تیره‌ی این اپ
+   * تقریباً دیده نمی‌شد. یعنی کاربری که با Tab حرکت می‌کند نمی‌دانست کجاست.
+   *
+   * `:focus-visible` نه `:focus`: کلیکِ ماوس روی یک دکمه نباید حلقه بگذارد،
+   * فقط ناوبریِ کیبورد. `outline` هم — نه `box-shadow` — چون خودش قوسِ گوشه‌ی
+   * المان را دنبال می‌کند و در جای تنگ چیزی را جابه‌جا نمی‌کند.
+   */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  /*
+   * جعبه‌ی مودال فقط برای این فوکوس می‌گیرد که صفحه‌خوان عنوانش را بخواند؛
+   * حلقه دورِ یک پنلِ تمام‌عرض چیزی به کسی نمی‌گوید.
+   */
+  [tabindex='-1']:focus {
+    outline: none;
   }
 }
 
@@ -101,6 +223,29 @@ body {
   unicode-bidi: plaintext;
 }
 
+/*
+ * ردیف‌های افقیِ کارت‌ها (هنرمندان/آلبوم‌ها در تب «همه») — اسکرول‌بارِ همیشه‌
+ * نمایان زیر یک ردیف کوتاه شلوغ و ناتمیز به‌نظر می‌رسید؛ اسپاتیفای هم آن‌جا
+ * اسکرول‌بار نشان نمی‌دهد، فقط با درگ/چرخ‌ماوس اسکرول می‌شود.
+ */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+ * هر ناحیه‌ای که خودش اسکرول دارد (صف پخش، متن آهنگ، پنل دانلود، گفتگو).
+ * بدون `contain`، رسیدن به ته لیست روی موبایل اسکرول را به صفحه‌ی پشتی پاس
+ * می‌دهد و کاربر وسطِ خواندن ناگهان کلِ صفحه را جابه‌جا می‌کند.
+ */
+.scroll-pane {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -112,6 +257,477 @@ body {
 }
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/*
+ * نوار پخش روی صفحه شناور است، پس فوتر زیرش گم می‌شد. `--player-h` فقط وقتی
+ * مقدار می‌گیرد که چیزی در حال پخش باشد — وگرنه هر صفحه یک نوار خالی فضا
+ * می‌داد. حاشیه‌ی امنِ پایین اما همیشه هست: روی آیفون خطِ خانه چند پیکسل از
+ * ته صفحه را می‌خورد، چه نوار پخشی باشد چه نباشد.
+ */
+body {
+  /*
+   * `max` نه جمع: روی گوشی خودِ تب‌بار حاشیه‌ی امن را در خودش دارد و جمع‌کردن
+   * یعنی دو بار حساب کردنش؛ روی دسکتاپ که تب‌بار صفر است، همان حاشیه‌ی امن
+   * باقی می‌ماند.
+   */
+  padding-bottom: calc(var(--player-h) + max(var(--tab-h), var(--safe-b)));
+}
+/* روی موبایل نوار پخش فشرده‌تر است و ارتفاع کمتری می‌گیرد */
+body.has-player {
+  --player-h: 4.25rem;
+}
+@media (min-width: 640px) {
+  body.has-player {
+    --player-h: 4.75rem;
+  }
+}
+
+/* ---------- کمک‌کلاس‌های ناحیه‌ی امن ---------- */
+
+.pt-safe {
+  padding-top: var(--safe-t);
+}
+.pb-safe {
+  padding-bottom: var(--safe-b);
+}
+/*
+ * حاشیه‌ی افقی که در حالت افقیِ گوشیِ ناچ‌دار زیر ناچ نمی‌رود. `max` است نه
+ * جمع: روی دستگاه بدون ناچ دقیقاً همان ۱rem همیشگی می‌ماند.
+ */
+.px-safe {
+  padding-left: max(1rem, var(--safe-l));
+  padding-right: max(1rem, var(--safe-r));
+}
+/* زیرِ هدرِ چسبان — با احتساب نوار وضعیت در حالت PWA */
+.top-header {
+  top: var(--header-h);
+}
+/* بالای نوار پخش و نوار خانه: جای دکمه‌های شناور */
+.bottom-safe {
+  bottom: calc(var(--player-h) + max(var(--tab-h), var(--safe-b)) + 1rem);
+}
+/* یک ردیف بالاتر از دکمه‌های شناور: جای پنل‌ها و توست‌ها */
+.bottom-safe-2 {
+  bottom: calc(var(--player-h) + max(var(--tab-h), var(--safe-b)) + 4.75rem);
+}
+
+/* ---------- شیشه‌ی مایع ----------
+ *
+ * چهار طعم از یک افکت:
+ *  .glass       — پنل‌ها و شیت‌های شناور (مودال، توست، پنل دانلود/گفتگو)؛
+ *                 حلقه‌ی specular دور تا دور *جای* border تیلویند را می‌گیرد
+ *  .glass-bar   — نوارهای چسبان/ثابتِ لبه‌دار (هدر، تب‌بار، شیتِ آلبوم/کتابخانه)؛
+ *                 فقط برقِ لبه‌ی بالا، بدون حلقه — border-* خودِ نوار سرِ جایش
+ *                 می‌ماند تا دو خطِ روشن زیر هم نیفتند
+ *  .glass-chip  — چیپ‌های کوچکِ روی کاور؛ لعابِ کمتر تا رنگِ زیرش زنده بماند
+ *  .glass-tint  — فقط بلور + حلقه؛ رنگِ پس‌زمینه را دستِ کلاسِ وضعیتِ خودش
+ *                 (bg-warn/15 و...) می‌سپارد و هرگز background-color نمی‌دهد
+ *
+ * سه جزءِ شیشه با هم:
+ *  ۱) بلور + اشباعِ پشت (backdrop-filter) — «مایع» بودن از اشباعِ رنگِ پشت
+ *     می‌آید، نه فقط تاری.
+ *  ۲) لعابِ نیمه‌شفاف از جنسِ --panel — پشتِ شیشه همیشه خوانا می‌ماند.
+ *  ۳) حلقه‌ی specular با inset box-shadow: لبه‌ی بالایی روشن‌تر (نوری که از
+ *     بالا به لبه‌ی شیشه می‌خورد) + یک خطِ نازکِ دور تا دور.
+ *
+ * دو نکته‌ی آبشاری که بدونشان این کلاس‌ها خرابکاری می‌کردند:
+ *  - box-shadowِ شیشه با `var(--tw-shadow)` ترکیب می‌شود، وگرنه shadow-2xlِ
+ *    خودِ پنل‌ها (سایه‌ی بیرونی) زیرِ inset می‌مرد.
+ *  - این قواعد بدونِ لایه‌اند و بر utilities تیلویند می‌چربند؛ پس کلاسِ
+ *    bg-*/border-* روی عنصرِ هدف باید حذف شود، نه اینکه کنارِ .glass بماند.
+ *
+ * تمِ روشن: سفیدِ specular روی پس‌زمینه‌ی روشن گم است — حلقه تیره می‌شود،
+ * برقِ بالا سفیدِ پُر، و لعاب غلیظ‌تر تا کنتراستِ متن بماند.
+ */
+
+/* fallbackِ مرورگرِ بدون backdrop-filter (و بدون color-mix): لعابِ تقریباً مات.
+ * ظاهر ساده‌تر، ولی هرگز متنِ ناخوانا روی محتوای شلوغِ پشت. */
+.glass,
+.glass-bar {
+  background-color: var(--panel);
+}
+.glass-chip {
+  background-color: var(--bg);
+}
+@supports (color: color-mix(in srgb, red 50%, blue)) {
+  .glass,
+  .glass-bar {
+    background-color: color-mix(in srgb, var(--panel) 96%, transparent);
+  }
+  .glass-chip {
+    background-color: color-mix(in srgb, var(--bg) 85%, transparent);
+  }
+}
+
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .glass,
+  .glass-bar,
+  .glass-chip,
+  .glass-tint {
+    /* دوزِ پایین‌تر از نسخه‌ی اول: تلگرام شیشه را «هوا» می‌خواهد نه دوده —
+       tint سفید با alpha≈۰٫۱ روی بلور، یعنی محتوا از پشت زنده رد شود. */
+    --glass-dose: 55%;
+    /* حلقه‌ی نئونی: تلگرام نورِ پشت را با color-matrix ~۱٫۱۲ روشن می‌کند و به
+       لبه ماسک می‌زند؛ در CSS همان لبه‌ی سفیدِ پُررنگ‌تر است. */
+    --glass-ring: rgb(255 255 255 / 18%);
+    --glass-shine: rgb(255 255 255 / 14%);
+    /* برقِ عمودی — هم‌ارزِ CAGradientLayerِ تلگرام (سفیدِ بالا → شفافِ پایین):
+       همان «نور از بالا به شیشه» که حسِ عدسی می‌دهد. */
+    --glass-sheen: linear-gradient(
+      to bottom,
+      rgb(255 255 255 / 10%),
+      rgb(255 255 255 / 0%) 46%
+    );
+    /* لنز: ماتریسِ رنگِ تلگرام برایِ خودِ شیشه (LegacyGlassView.normal) قطرِ
+       ~۲٫۶۷ و اشباعِ منفیِ ~۱٫۱۱ دارد — یعنی lift روشنایی + اشباعِ قویِ رنگِ
+       پشت. نزدیک‌ترین هم‌ارزِ CSS: saturate ~۲٫۰ و brightness ~۱٫۰۹. */
+    -webkit-backdrop-filter: blur(18px) saturate(200%) brightness(1.09);
+    backdrop-filter: blur(18px) saturate(200%) brightness(1.09);
+    background-image: var(--glass-sheen);
+  }
+  /* نوارِ چسبان (هدر، تب‌های کتابخانه) = «پس‌زمینه‌ی ساکنِ» تلگرام
+     (LiquidLensView.RestingBackgroundView): ماتریسِ ملایم‌تر — قطرِ ~۱٫۰۸ و
+     بایاسِ +۰٫۱۳۵. اشباعِ کمتر تا نوار آرام بماند و فقط لنزِ انتخاب «زنده»
+     باشد؛ دقیقاً تفکیکِ دو ماتریس در سورسِ تلگرام. */
+  .glass-bar {
+    -webkit-backdrop-filter: blur(18px) saturate(135%) brightness(1.12);
+    backdrop-filter: blur(18px) saturate(135%) brightness(1.12);
+  }
+  @supports (color: color-mix(in srgb, red 50%, blue)) {
+    .glass,
+    .glass-bar,
+    .glass-chip {
+      background-color: color-mix(in srgb, var(--panel) var(--glass-dose), transparent);
+    }
+  }
+  .glass,
+  .glass-chip {
+    /* سایه‌ی داخلیِ پایین = عمقِ عدسی؛ لبه‌ی پایینی کمی تیره‌تر تا شیشه «گنبد»
+       به‌نظر برسد نه ورقِ تخت. var(--tw-shadow) سایه‌ی بیرونیِ خودِ پنل را زنده
+       نگه می‌دارد (shadow-2xl و...). */
+    box-shadow:
+      inset 0 1px 0 0 var(--glass-shine),
+      inset 0 0 0 1px var(--glass-ring),
+      inset 0 -1px 1px 0 rgb(0 0 0 / 12%),
+      var(--tw-shadow, 0 0 #0000);
+  }
+  .glass-bar {
+    box-shadow:
+      inset 0 1px 0 0 var(--glass-shine),
+      inset 0 -1px 1px 0 rgb(0 0 0 / 12%);
+  }
+  .glass-tint {
+    box-shadow: inset 0 0 0 1px var(--glass-ring);
+  }
+  /* چیپِ روی کاور: لعابِ کمتر، رنگِ زیرش بیشتر؛ برقِ عمودی روی دایره‌ی کوچک
+     مثلِ تیله‌ی شیشه‌ای می‌نشیند */
+  .glass-chip {
+    --glass-dose: 38%;
+  }
+  [data-theme='light'] .glass,
+  [data-theme='light'] .glass-bar,
+  [data-theme='light'] .glass-chip,
+  [data-theme='light'] .glass-tint {
+    --glass-dose: 64%;
+    --glass-ring: rgb(19 19 19 / 12%);
+    --glass-shine: rgb(255 255 255 / 85%);
+    --glass-sheen: linear-gradient(
+      to bottom,
+      rgb(255 255 255 / 55%),
+      rgb(255 255 255 / 0%) 50%
+    );
+  }
+  /* چیپِ روشن روی کاورِ رنگی: سفیدِ کم متنِ اکسنت را بی‌کنتراست می‌کرد */
+  [data-theme='light'] .glass-chip {
+    --glass-dose: 58%;
+  }
+}
+
+/* ---------- لنزِ تب‌بار (Liquid Lens) ----------
+ *
+ * امضایِ تلگرام این است: کپسولِ پایین یک لایه‌ی شیشه‌یِ «ساکن» است و داخلش
+ * یک *لنزِ* جداگانه — هایلایتِ نیمه‌شفافِ انتخاب — با فنر بینِ تب‌ها سُر می‌خورد
+ * و موقعِ نشست کمی جمع/کش می‌آید (squash/stretch) و در پرشِ تند قوسِ سهمی می‌زند
+ * (LiquidLensView.swift + سورسِ رسمیِ مسابقه‌ی تلگرام).
+ *
+ * سه نکته‌ی آبشاری:
+ *  - لنز backdrop-filterِ خودش را ندارد: دو لایه‌ی بلور روی هم = گِل، نه شیشه.
+ *    لنز فقط یک هایلایتِ رنگیِ سُر‌خور است، بلور از خودِ کپسول می‌آید.
+ *  - سایه‌ی معلقِ کپسول = دو سیاهِ بسیار نرمِ تلگرام (blur 30 @α.045 +
+ *    blur 20 @α.01، offset y=1). shadow-2xl تیلویند زیادی تیز و سنگین بود.
+ *  - حلقه‌ی لنز 0.8pt و سفیدِ α0.3 (عددِ دقیقِ generateLegacyGlassImage) است.
+ */
+.tabbar-shell {
+  /* سایه‌ی معلقِ رسمیِ تلگرام؛ --tw-shadow تا shadow-2xlِ احتمالیِ والد نمیرد */
+  box-shadow:
+    0 1px 30px 0 rgb(0 0 0 / 4.5%),
+    0 1px 20px 0 rgb(0 0 0 / 1%),
+    var(--tw-shadow, 0 0 #0000);
+}
+.tabbar-shell {
+  /* دوزِ غلیظ‌تر از شیشه‌ی عمومی (۵۵٪): تب‌بار همیشه روی محتوایِ در‌حالِ
+     اسکرولِ کاربر است — کاورِ سفیدِ آلبوم از زیرش رد می‌شود و شیشه‌یِ رقیق
+     آن سفیدی را رد می‌کند؛ متنِ خاکستری روی خاکستریِ روشن گم می‌شود.
+     بدترین حالتِ ممکن (صفحه‌ی کاملاً سفید پشتِ نوار): ۸۴٪ از --panelِ #101010
+     روی سفید → سطحِ ~#363636؛ --muted (#a3a3a3) رویش ~۴٫۸:1 — آستانه‌ی AA
+     برای متنِ ۱۰px رد می‌شود. روی محتوایِ تیره‌ی همیشگی (~#0e0e0e) ~۷٫۶:1.
+     بلور و لنز سرِ جایشان می‌مانند — فقط لعاب غلیظ‌تر است. */
+  --glass-dose: 84%;
+}
+[data-theme='light'] .tabbar-shell {
+  /* تمِ روشن: لعابِ سفید باید محتوایِ تیره‌یِ زیرِ نوار را هم خفه کند تا
+     --mutedِ روشن (#595959) رویش خوانا بماند */
+  --glass-dose: 88%;
+}
+.tabbar-lens {
+  /* لنزِ تیره، نه سفیدِ α0.1ِ تلگرام-iOS: تلگرام انتخاب را با ۹٪ رنگِ اکسنت
+     می‌زند (اندروید) که روی هر پس‌زمینه‌ای دیده می‌شود؛ سفید روی کاورِ روشن
+     محو می‌شد. سیاهِ α22 روی شیشه‌یِ تیره زیرِ خودش می‌نشیند (ظریف) و روی
+     محتوایِ سفیدِ پشت، لنز خاکستریِ روشن می‌شود (~#d3) که هم دیده می‌شود
+     هم کنتراستِ آیکونِ اکسنت را خراب نمی‌کند. حلقه سفید α40 لبه‌اش را در
+     هر دو حالت جدا نگه می‌دارد. */
+  background: rgb(0 0 0 / 22%);
+  box-shadow: inset 0 0 0 0.8px rgb(255 255 255 / 40%);
+  /* GPU: فقط transform جابه‌جا می‌شود؛ layout هرگز دست نمی‌خورد */
+  will-change: transform;
+  backface-visibility: hidden;
+}
+[data-theme='light'] .tabbar-lens {
+  /* تمِ روشن: همان سیاهِ ملایمِ legacySelectionViewِ تلگرام — لنزِ خاکستری
+     روی لعابِ سفید، خوانا روی هر محتوایی */
+  background: rgb(0 0 0 / 9%);
+  box-shadow: inset 0 0 0 0.8px rgb(255 255 255 / 60%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tabbar-lens {
+    transition: none;
+  }
+}
+
+/*
+ * قدِ ریشه‌ی اپ.
+ *
+ * `min-h-dvh` یعنی «به بلندیِ کلِ نمایشگر»، ولی `body` جدا از آن یک
+ * padding-bottom به‌اندازه‌ی نوار پخش و تب‌بار هم دارد. جمعشان از یک صفحه
+ * می‌زد بیرون: حتی صفحه‌ای که هیچ محتوایی نداشت چند ده پیکسل اسکرول می‌خورد.
+ *
+ * حالا همان دو مقدار از ارتفاع کم می‌شوند و جمعِ کل دقیقاً یک صفحه می‌ماند.
+ */
+.app-shell {
+  min-height: calc(100dvh - var(--player-h) - max(var(--tab-h), var(--safe-b)));
+}
+
+/*
+ * نوار پخش روی گوشی *روی* تب‌بار می‌نشیند، نه ته صفحه. حاشیه‌ی امنِ پایین هم
+ * آنجا کارِ تب‌بار است؛ اگر نوار پخش هم آن را می‌گذاشت، بینِ دو نوار یک نوارِ
+ * خالیِ به‌اندازه‌ی نوارِ ژست می‌ماند.
+ */
+.player-dock {
+  bottom: var(--tab-h);
+  padding-bottom: var(--safe-b);
+}
+@media (max-width: 639px) {
+  .player-dock {
+    padding-bottom: 0;
+  }
+}
+
+/*
+ * اسپاتیفایی: نوار پخش رنگِ غالبِ کاورِ همان ترک را می‌گیرد.
+ *
+ * رنگ‌ها را PlayerBar می‌فرستد (`dominantColor` در lib/artColor.ts):
+ * --pb-rgb رنگِ خام و --pb-strong همان رنگِ روشن‌شده تا luminance ثابت.
+ * متغیرهای تم (--panel/--line/--accent) فقط داخلِ داک بازنویسی می‌شوند، پس
+ * همه‌ی بچه‌ها — نوار پیشرفت، دستگیره، دکمه‌ی پخش، هاورها — خودکار هم‌رنگ
+ * می‌شوند و هیچ کلاسی لازم نیست عوض شود. بدونِ کاور `data-tint` گذاشته
+ * نمی‌شود و نوار تمِ پیش‌فرض می‌ماند.
+ *
+ * --accent-fg به مشکیِ خنثی می‌رود چون --pb-strong هر هویی که باشد به
+ * روشناییِ ~۰٫۵۵ نرمال شده و متنِ مشکی روی همه‌شان کنتراست دارد.
+ */
+.player-dock[data-tint] {
+  --accent: var(--pb-strong);
+  --accent-fg: #0b0b0b;
+  /*
+   * تعویضِ نرمِ رنگ بین دو ترک. خودِ داک دیگر پس‌زمینه ندارد — سطحِ شیشه‌ای
+   * داخلش (کپسولِ موبایل یا نوارِ دسکتاپ) بک‌گراند را از --panelِ
+   * بازنویسی‌شده می‌گیرد و .glass رنگ را با color-mix می‌سازد؛ پس ترنزیشن
+   * باید روی همان سطحِ شیشه‌ای بنشیند، نه روی داک.
+   */
+  .glass,
+  .glass-bar {
+    transition: background-color 0.6s ease;
+  }
+}
+/*
+ * مرورگری که color-mix ندارد (fallbackِ Lightning رنگِ خام می‌داد — متن
+ * رویش خوانا نمی‌ماند) همان --panel/--line تم می‌ماند و فقط اکسنت همرنگ
+ * کاور می‌شود؛ --pb-strong خودِ color-mix است، پس آن‌جا invalid می‌شود
+ * و --accent هم پیش‌فرض می‌ماند. بی‌خطر.
+ */
+@supports (color: color-mix(in srgb, red 50%, blue)) {
+  .player-dock[data-tint] {
+    --panel: color-mix(in srgb, rgb(var(--pb-rgb)) 16%, var(--bg));
+    --panel-2: color-mix(in srgb, rgb(var(--pb-rgb)) 26%, var(--bg));
+    --line: color-mix(in srgb, rgb(var(--pb-rgb)) 40%, var(--bg));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .player-dock[data-tint] .glass,
+  .player-dock[data-tint] .glass-bar {
+    transition: none;
+  }
+}
+/*
+ * تمِ روشن: ۱۶٪ از رنگ روی #f7f7f5 تقریباً دیده نمی‌شود، پس دوزِ رنگ بالاتر
+ * می‌رود تا تینت واقعاً حس شود — متن‌های تیره روی این روشنی‌ها کنتراست دارند.
+ */
+@supports (color: color-mix(in srgb, red 50%, blue)) {
+  [data-theme='light'] .player-dock[data-tint] {
+    --panel: color-mix(in srgb, rgb(var(--pb-rgb)) 24%, white);
+    --panel-2: color-mix(in srgb, rgb(var(--pb-rgb)) 34%, white);
+    --line: color-mix(in srgb, rgb(var(--pb-rgb)) 48%, white);
+    --accent-fg: #0b0b0b;
+  }
+}
+
+/*
+ * لمسی در برابر ماوس.
+ *
+ * الگوی «با هاور ظاهر شو» روی موبایل یعنی «هرگز ظاهر نشو» — منویِ «⋯» ردیف‌های
+ * کتابخانه و دکمه‌ی تلگرامِ کارت‌ها عملاً روی گوشی نامرئی بودند. روی دستگاهی که
+ * هاور ندارد، همان‌ها همیشه دیده می‌شوند و چیزی که جایش را می‌گرفت (شماره‌ی
+ * ردیف زیر دکمه‌ی پخش) کنار می‌رود.
+ */
+@media (hover: none) {
+  .hover-reveal {
+    opacity: 1;
+    transform: none;
+  }
+  .hover-hide {
+    opacity: 0;
+  }
+}
+
+/*
+ * نوار جابه‌جایی و صدا.
+ *
+ * ورودی بومی range است نه div سفارشی: کیبورد، صفحه‌خوان و درگ را مجانی می‌دهد.
+ * `--pct` بخش پخش‌شده را پر می‌کند و از JS ست می‌شود.
+ *
+ * جهت عمداً ltr قفل است: در RTL مرورگر range را برعکس می‌کند و آن‌وقت زمان از
+ * راست به چپ جلو می‌رفت — قرارداد جهانیِ پخش‌کننده‌ها این نیست، حتی در رابط فارسی.
+ */
+.seek {
+  -webkit-appearance: none;
+  appearance: none;
+  direction: ltr;
+  width: 100%;
+  height: 14px;
+  background: transparent;
+  cursor: pointer;
+}
+.seek::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 99px;
+  background: linear-gradient(
+    to right,
+    var(--accent) var(--pct, 0%),
+    var(--line) var(--pct, 0%)
+  );
+}
+.seek::-moz-range-track {
+  height: 3px;
+  border-radius: 99px;
+  background: linear-gradient(
+    to right,
+    var(--accent) var(--pct, 0%),
+    var(--line) var(--pct, 0%)
+  );
+}
+.seek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 11px;
+  height: 11px;
+  margin-top: -4px;
+  border-radius: 99px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.seek::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border: 0;
+  border-radius: 99px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.seek:hover::-webkit-slider-thumb,
+.seek:focus-visible::-webkit-slider-thumb {
+  opacity: 1;
+}
+.seek:hover::-moz-range-thumb,
+.seek:focus-visible::-moz-range-thumb {
+  opacity: 1;
+}
+/*
+ * حینِ کشیدن، دستگیره درشت می‌شود و هاله می‌گیرد — همان «گرفته شد» که
+ * اپل‌موزیک می‌دهد. کلاسش را خودِ SeekBar موقعِ scrub می‌گذارد.
+ */
+.seek-scrubbing::-webkit-slider-thumb {
+  opacity: 1;
+  width: 18px;
+  height: 18px;
+  margin-top: -7px;
+  box-shadow: 0 0 0 6px color-mix(in oklab, var(--accent) 25%, transparent);
+}
+.seek-scrubbing::-moz-range-thumb {
+  opacity: 1;
+  width: 18px;
+  height: 18px;
+  box-shadow: 0 0 0 6px color-mix(in oklab, var(--accent) 25%, transparent);
+}
+.seek-scrubbing {
+  height: 20px;
+}
+.seek-scrubbing::-webkit-slider-runnable-track {
+  height: 5px;
+}
+.seek-scrubbing::-moz-range-track {
+  height: 5px;
+}
+/*
+ * روی لمس هیچ‌وقت «هاور» نمی‌آید، پس دستگیره باید همیشه باشد وگرنه معلوم
+ * نیست کجای نوار را گرفته‌ای. کل نوار هم بلندتر می‌شود تا با انگشت بشود گرفتش.
+ *
+ * `pan-y` عمدی است: کشیدنِ افقی مالِ خودِ نوار است، ولی کشیدنِ عمودی باید
+ * صفحه را اسکرول کند — با `manipulation` نوار وسطِ درگ صفحه را می‌لغزاند.
+ */
+.seek {
+  touch-action: pan-y;
+}
+@media (hover: none) {
+  .seek {
+    height: 24px;
+  }
+  .seek::-webkit-slider-runnable-track,
+  .seek::-moz-range-track {
+    height: 4px;
+  }
+  .seek::-webkit-slider-thumb {
+    width: 14px;
+    height: 14px;
+    margin-top: -5px;
+    opacity: 1;
+  }
+  .seek::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    opacity: 1;
+  }
 }
 
 @keyframes shimmer {
@@ -152,6 +768,110 @@ body {
   animation: rise 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/*
+ * هاله‌ی دنبال‌کننده‌ی ماوس روی کارت‌ها (`SpotlightCard.tsx`).
+ *
+ * `z-index: -1` عمدی است: با آن، هاله بالای پس‌زمینه‌ی خودِ کارت می‌نشیند ولی
+ * زیرِ متن و کاور — وگرنه (که حالتِ پیش‌فرضِ یک `::before`ِ absolute است) روی
+ * نوشته می‌افتاد و خواناییِ عنوان‌ها را کم می‌کرد. `isolation` هم لازم است تا
+ * آن ۱- از کارت بیرون نزند و پشتِ کلِ صفحه نرود.
+ */
+.spotlight-card {
+  position: relative;
+  isolation: isolate;
+}
+.spotlight-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  background: radial-gradient(
+    var(--spot-size, 220px) circle at var(--spot-x, 50%) var(--spot-y, 50%),
+    var(--spot-color),
+    transparent 72%
+  );
+}
+.spotlight-card:hover::before,
+.spotlight-card:focus-visible::before {
+  opacity: 1;
+}
+
+/*
+ * متنِ براق — باندِ نوری که روی حروف رد می‌شود (`ShinyText.tsx`).
+ *
+ * گرادیان روی خودِ متن بریده می‌شود، پس رنگِ متن باید شفاف شود. اگر مرورگری
+ * `background-clip: text` نداشته باشد این یعنی متنِ نامرئی — برای همین رنگِ
+ * توپُر پیش‌فرض است و شفافیت فقط داخلِ `@supports` اتفاق می‌افتد.
+ */
+@keyframes shiny-text {
+  to {
+    background-position: -200% 0;
+  }
+}
+.shiny-text {
+  color: var(--shiny-base);
+}
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  .shiny-text {
+    background-image: linear-gradient(
+      110deg,
+      var(--shiny-base) 42%,
+      var(--shiny-glow) 50%,
+      var(--shiny-base) 58%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: shiny-text var(--shiny-speed, 4s) linear infinite;
+  }
+}
+/* در راست‌به‌چپ نور هم مثل خواندن، از راست می‌آید */
+[dir='rtl'] .shiny-text {
+  animation-direction: reverse;
+}
+/*
+ * صریح خاموش می‌شود، نه با همان قانونِ سراسریِ پایینِ فایل: آن قانون فقط
+ * مدت را ۰.۰۱ میلی‌ثانیه می‌کند و یک انیمیشنِ `infinite` با آن مدت به‌جای
+ * ایستادن، دیوانه‌وار تکرار می‌شود.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .shiny-text {
+    animation: none;
+  }
+}
+
+/*
+ * موج‌نمای تزئینیِ هیرو. ارتفاع هر میله از JS می‌آید (ثابت و تکرارپذیر)، این‌جا
+ * فقط نفس کشیدنش تعریف می‌شود — کش‌آمدن از پایین، تا مثل یک اکولایزر واقعی
+ * روی خطِ کف بنشیند نه این‌که وسطِ هوا بزرگ و کوچک شود.
+ */
+@keyframes wave {
+  0%,
+  100% {
+    transform: scaleY(0.4);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+.wave-bar {
+  transform-origin: bottom;
+  animation: wave 2.4s ease-in-out infinite;
+}
+/*
+ * همان میله‌ها داخل SVG (نشانِ «در حال پخش»): بدون این، مبدأِ transform روی
+ * گوشه‌ی canvas می‌نشیند نه کفِ خودِ میله، و میله‌ها به‌جای بالا و پایین رفتن
+ * از قاب بیرون می‌زنند.
+ */
+svg .wave-bar {
+  transform-box: fill-box;
+}
+
 @keyframes toast-in {
   from {
     opacity: 0;
@@ -166,6 +886,414 @@ body {
   animation: toast-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/*
+ * خروجِ توست — قرینه‌ی `toast-in`. استور توست را `leaving` می‌کند و بعد از
+ * همین مدت برش می‌دارد (`TOAST_OUT_MS` در `store/toasts.ts`؛ عددشان یکی است).
+ * `forwards` عمدی: بدونش توست بینِ پایانِ انیمیشن و حذفِ واقعی یک لحظه به
+ * حالتِ عادی برمی‌گشت و چشمک می‌زد.
+ */
+@keyframes toast-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+}
+.toast-out {
+  animation: toast-out 0.22s ease-in forwards;
+}
+
+/*
+ * سه نقطه‌ی «در حالِ فکر کردن» — نوبت‌به‌نوبت نفس می‌کشند. تأخیرِ هر نقطه
+ * inline ست می‌شود. مثلِ `shiny-text` صریح خاموش می‌شود: قانونِ سراسریِ پایینِ
+ * فایل فقط مدت را ۰.۰۱ میلی‌ثانیه می‌کند و یک انیمیشنِ `infinite` با آن مدت
+ * به‌جای ایستادن دیوانه‌وار تکرار می‌کند.
+ */
+@keyframes think-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+    transform: none;
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+.think-dot {
+  animation: think-dot 1.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .think-dot {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+/*
+ * تیکِ کشیده‌شده — مسیر با dashoffset از هیچ درمی‌آید. طولِ مسیرِ تیک حدود
+ * ۲۰.۲ است؛ ۲۱ کمی بیشتر تا انتهای مسیر هرگز بریده نشود.
+ */
+@keyframes check-draw {
+  from {
+    stroke-dashoffset: 21;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.check-draw {
+  stroke-dasharray: 21;
+  stroke-dashoffset: 21;
+  animation: check-draw 0.35s cubic-bezier(0.22, 1, 0.36, 1) 0.05s forwards;
+}
+
+/* لرزشِ کوچکِ خطا — توجه را می‌گیرد بدونِ اینکه چشم را بزند */
+@keyframes shake {
+  0%,
+  100% {
+    transform: none;
+  }
+  20% {
+    transform: translateX(-3px);
+  }
+  40% {
+    transform: translateX(3px);
+  }
+  60% {
+    transform: translateX(-2px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
+.shake {
+  animation: shake 0.4s ease-in-out;
+}
+
+/*
+ * پاپِ عدد — برای شمارنده‌هایی که مقدارشان عوض می‌شود. المان با
+ * `key={value}` از نو سوار می‌شود تا انیمیشن روی هر تغییر اجرا شود.
+ */
+@keyframes num-pop {
+  from {
+    transform: scale(1.35);
+  }
+  to {
+    transform: none;
+  }
+}
+.num-pop {
+  animation: num-pop 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/*
+ * هاله‌ی رنگ‌بندی‌شده به رنگ منبع (اسپاتیفای/دیزر/...) پشت کاور کارت‌ها.
+ * رنگ از `--src` می‌آید که هر کارت خودش (به‌صورت inline) ست می‌کند، چون
+ * دینامیک است و از پالت ثابت تیلویند درنمی‌آید.
+ */
+.src-glow {
+  background: var(--src, transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.group:hover .src-glow {
+  opacity: 0.5;
+}
+
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.sheet-in {
+  animation: sheet-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/*
+ * ورودِ نمای تمام‌صفحه‌ی «در حال پخش» — فقط محوِ شفافیت، نه جابه‌جایی/مقیاس.
+ *
+ * `.sheet-in` برای منوهای کوچک است (translateY + scale) و روی یک سطحِ ماتِ به‌اندازه‌ی
+ * ویوپورت لبه‌ی پشت را بیرون می‌زند و کلِ لایه را دوباره ترکیب می‌کند. اینجا
+ * مسیرِ اصلیِ بازکردن، گذارِ عنصرِ مشترکِ کاور است (View Transition) که زیرِ
+ * `data-vt` خاموش می‌شود؛ پس در مسیرِ fallback فقط یک فیدِ نرم می‌خواهیم که هم
+ * ارزان است هم لبه نشان نمی‌دهد.
+ */
+@keyframes np-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.np-in {
+  animation: np-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.backdrop-in {
+  animation: backdrop-in 0.25s ease both;
+}
+
+/*
+ * کارائوکه‌ی متن آهنگ.
+ *
+ * خطِ فعال یک `background` گرادیانی دارد که با `background-clip: text` روی
+ * حروف نشسته و با `--p` (پیشرفتِ ۰ تا ۱ که حلقه‌ی rAF از زمانِ واقعیِ صوت
+ * می‌نویسد) جلو می‌رود: تا `--p` رنگِ accent→accent-2، بعدش خاکستریِ کم‌رنگ.
+ * نوارِ ۴٪یِ وسط، لبه‌ی رنگ را تیز نمی‌گذارد — مثلِ هایلایتِ ماژیک نرم
+ * تمام می‌شود.
+ *
+ * جهتِ گرادیان با خودِ متن می‌آید: فارسی از راست. بدونِ این، رنگِ خطِ فارسی
+ * از چپ پر می‌شد و خلافِ جهتِ خواندن.
+ *
+ * دو نکته‌ی بقا که نسخه‌ی اولِ این افکت را روی بعضی موتورهای Chromium/WebKit
+ * به یک خطِ سفیدِ بی‌رنگ خراب می‌کرد:
+ *  - رنگِ «پرنشده» عمداً `var(--muted)` ساده است نه `color-mix(...)`: اگر
+ *    موتور، color-mix را نشناسد، کلِ `background` باطل می‌شود و گرادیان
+ *    نمی‌آمد. با توکنِ رنگیِ ساده، گرادیان همیشه معتبر است.
+ *  - کلِ تکنیکِ clip در `@supports` پیچیده شده و بیرونش خطِ فعال یک
+ *    `color: var(--fg)` خوانا دارد. یعنی اگر `background-clip: text` یا
+ *    `-webkit-text-fill-color` جایی کار نکند، متن *نامرئی* نمی‌شود — فقط
+ *    سفیدِ ساده می‌ماند. هیچ‌وقت نباید کاربر متن را از دست بدهد.
+ */
+.karaoke-line {
+  --p: 0;
+  --k-dir: to right;
+  /* عمق: خط‌های غیرِ فعال کمی عقب‌تر و محو — تعویضِ خط با گذارِ نرم تیز می‌شود.
+     فیلتر فقط روی ≤۷ خطِ پنجره اعمال می‌شود و فقط لحظه‌ی تعویض انیمیت دارد. */
+  filter: blur(2px);
+  transform: scale(0.985);
+}
+.karaoke-line[dir='rtl'] {
+  --k-dir: to left;
+}
+.karaoke-active {
+  color: var(--fg);
+  filter: none;
+  transform: none;
+}
+/* کلمه‌های LRC تقویت‌شده: هر کلمه گرادیانِ خودش با `--wp` (۰ تا ۱ که حلقه‌ی
+   rAF می‌نویسد). `--k-dir` از خطِ والد به ارث می‌رسد — فارسی از راست پر می‌شود.
+   بیرونِ @supports هیچ قاعده‌ای لازم نیست: spanها رنگِ عادیِ خط را به ارث
+   می‌برند و متن خوانا می‌ماند. */
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .karaoke-active {
+    background: linear-gradient(
+      var(--k-dir),
+      var(--accent) 0%,
+      var(--accent-2) calc(var(--p) * 100%),
+      var(--muted) calc(var(--p) * 100% + 4%),
+      var(--muted) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    /* در WebKit فقط `color: transparent` کافی نیست؛ fillِ متن را صریح شفاف
+       می‌کنیم تا گرادیان از پشتِ حروف دیده شود */
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+  .karaoke-word {
+    background: linear-gradient(
+      var(--k-dir),
+      var(--accent) 0%,
+      var(--accent-2) calc(var(--wp, 0) * 100%),
+      var(--muted) calc(var(--wp, 0) * 100% + 4%),
+      var(--muted) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+}
+
+/*
+ * مورفِ آیکنِ پخش/توقف.
+ *
+ * `d` فقط وقتی انیمیت می‌شود که هر دو حالت تعدادِ نقطه‌ی یکسان داشته باشند —
+ * برای همین مثلث به دو ذوزنقه شکسته شده. منحنیِ فنری هم عمدی است: حرکتِ
+ * خطی برای تغییرِ شکلِ آیکن «مکانیکی» حس می‌شود.
+ */
+.pp-morph path {
+  transition: d 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/*
+ * هاله‌ی هم‌رhythm با صدا.
+ *
+ * `--glow` (۰ تا ۱) را حلقه‌ی rAF از انرژیِ بمِ صوت می‌نویسد. دو اثر با هم
+ * می‌روند: مقیاس (هاله با هر ضرب بیرون می‌زند) و شفافیت. سقفِ مقیاس عمداً
+ * کم است (۱.۲۸) — بیشتر از این، «ریتم» به «تپقِ عصبی» تبدیل می‌شود و
+ * حواس‌پرت می‌کند.
+ *
+ * `will-change` روی transform/opacity: این نود هر فریم عوض می‌شود و بدونِ
+ * ارتقا به لایه‌ی خودش، روی گوشی‌های میان‌رده باعثِ repaintِ کلِ شیت می‌شد.
+ */
+.audio-glow {
+  --glow: 0;
+  opacity: calc(var(--glow) * 0.55);
+  transform: scale(calc(1 + var(--glow) * 0.28));
+  transition: opacity 0.12s linear;
+  will-change: transform, opacity;
+}
+
+/*
+ * محو‌شدنِ کنترل‌ها در حالتِ محیط.
+ *
+ * `visibility: hidden` هم لازم است نه فقط opacity: کنترلِ شفاف ولی «زنده» هم
+ * کلیک می‌گیرد و هم با صفحه‌کلیدِ مجازی/خواننده‌ی صفحه قابل‌دسترس است — یعنی
+ * کاربرِ بدونِ بینایی روی دکمه‌ای می‌افتد که نمی‌بیند. `inert` روی والدِ
+ * کنترل‌ها هر دو را یک‌جا می‌بندد؛ این کلاس فقط محوِ بصری را می‌دهد.
+ */
+.idle-fade {
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+.idle-fade-in {
+  opacity: 1;
+  transition: opacity 0.35s ease;
+}
+
+@keyframes pp-bounce {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(0.82);
+  }
+  70% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.pp-bounce {
+  animation: pp-bounce 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/*
+ * میله‌های اکولایزرِ ردیفِ فعالِ صف — سه میله با فازهای متفاوت تا حرکتشان
+ * «پخش‌شدن» را برساند نه تیک‌تاکِ هم‌زمان.
+ */
+@keyframes eq-bar {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+.eq-bar {
+  transform-origin: bottom;
+  animation: eq-bar 0.9s ease-in-out infinite;
+}
+.eq-bar:nth-child(2) {
+  animation-duration: 0.62s;
+  animation-delay: -0.2s;
+}
+.eq-bar:nth-child(3) {
+  animation-duration: 1.15s;
+  animation-delay: -0.45s;
+}
+
+/*
+ * بالا و پایینِ پنلِ متن محو می‌شود تا خط‌ها ناگهانی از لبه بیرون نزنند —
+ * همان کاری که اپل‌موزیک با اسکرولِ عمودیِ متن می‌کند.
+ *
+ * قبلاً لایه‌ی دومی هم بود که نوارِ اسکرول را از این محو مستثنا می‌کرد؛ با
+ * پنهان‌شدنِ اسکرول‌بار (`no-scrollbar`) دیگر بی‌معناست و فقط لبه‌ی راستِ
+ * متن را بیهوده محو می‌کرد — حذف شد.
+ */
+.lyrics-scroll {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent);
+}
+
+/*
+ * ردیف‌هایی که با نگه‌داشتنِ انگشت منو باز می‌کنند.
+ *
+ * بدونش، iOS و اندروید روی همان نگه‌داشتن منویِ خودشان («کپیِ لینک»،
+ * «ذخیره‌ی تصویر») را می‌آورند و منویِ اپ زیرش گم می‌شود. انتخابِ متن هم
+ * برداشته می‌شود چون کشیدنِ انگشت روی عنوان، به‌جای اسکرول، متن را هایلایت
+ * می‌کرد.
+ */
+.hold-menu {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/*
+ * ردیف‌های لیستِ بلندِ کتابخانه.
+ *
+ * `content-visibility: auto` یعنی مرورگر ردیف‌هایی را که بیرونِ کادرِ دیدند
+ * اصلاً چیدمان و نقاشی نمی‌کند. روی کتابخانه‌ی چندصدتایی، این تفاوتِ
+ * اسکرولِ روان و اسکرولِ بریده‌بریده روی اندرویدِ میان‌رده است.
+ *
+ * `contain-intrinsic-size` جفتش لازم است: بدونش ردیفِ نادیده ارتفاعش صفر
+ * حساب می‌شود، نوارِ اسکرول بالا و پایین می‌پرد و رسیدن به ته لیست غیرممکن
+ * می‌شود. `auto` یعنی «اندازه‌ی واقعیِ دفعه‌ی قبل را یادت بماند».
+ *
+ * هشدار برای آینده: این خاصیت `contain: paint` هم می‌آورد، یعنی هر چیزی که
+ * از ردیف بزند بیرون بریده می‌شود و `position: fixed`ِ داخلش نسبت به خودِ
+ * ردیف جا می‌گیرد نه صفحه. برای همین ردیفی که منو یا مودالِ باز دارد این
+ * کلاس را نمی‌گیرد — نه به‌عنوان بهینه‌سازی، که وگرنه منویش نامرئی می‌شد.
+ */
+.row-cv {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 3.5rem;
+}
+
+/*
+ * گذارِ کاور بین مینی‌پلیر و نمای کامل.
+ *
+ * انیمیشنِ پیش‌فرضِ مرورگر برای عنصرِ مشترک، محوِ ضربدریِ دو عکس است؛ روی دو
+ * کاورِ *یکسان* که فقط اندازه‌شان فرق دارد، آن محو فقط تصویر را تار می‌کند.
+ * حذفش می‌کند که فقط قاب حرکت کند — همان چیزی که چشم انتظارش را دارد.
+ */
+::view-transition-group(np-cover) {
+  animation-duration: 0.42s;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+::view-transition-old(np-cover),
+::view-transition-new(np-cover) {
+  animation: none;
+  mix-blend-mode: normal;
+  height: 100%;
+  object-fit: cover;
+}
+/* بقیه‌ی صفحه فقط یک محوِ کوتاه می‌خواهد، نه نیم‌ثانیه ماندن روی عکسِ ثابت */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.24s;
+}
+
+/*
+ * حینِ گذار، شیت و پس‌زمینه‌اش انیمیشنِ ورودِ خودشان را ندارند — دلیلش در
+ * `viewTransition.ts` توضیح داده شده.
+ */
+html[data-vt] .sheet-in,
+html[data-vt] .np-in,
+html[data-vt] .backdrop-in {
+  animation: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -174,3 +1302,93 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/*
+ * قرص‌های ناوبریِ هدر در عرضِ میانی — بینِ sm و لپ‌تاپِ معمولی.
+ *
+ * سه قرص با پدینگِ کامل و فونتِ ۱۳، کنارِ سرچ‌بار و کنترل‌های سمتِ دیگر، در
+ * ۶۴۰–۸۰۰ پیکسل جا نمی‌شوند و آخرین قرص («کتابخانه») پشتِ لبه بریده می‌شد.
+ * سرچ‌بار `min-w-0` است و زودتر از همه جمع می‌شود، ولی بعد از صفر شدنِ آن
+ * نوبتِ قرص‌هاست که نمی‌رسد — چون `shrink-0` دارند. فشرده‌سازیِ خودِ قرص‌ها
+ * در همین بازه، ~۶۰ پیکسل آزاد می‌کند و برش حذف می‌شود.
+ *
+ * `!important` لازم است چون پدینگ و فونت، استایلِ درون‌خطیِ خودِ قرص‌اند
+ * (از `--pill-pad-x` می‌آیند) و درون‌خطی بر هر قاعده‌ی عادی می‌چربد.
+ */
+@media (min-width: 640px) and (max-width: 819px) {
+  header ul[role='menubar'] a[role='menuitem'] {
+    padding-inline: 9px !important;
+    font-size: 12px !important;
+  }
+}
+
+/*
+ * قلبِ لایک (LikeHeart.tsx) — pop و پاششِ نقطه، از نمونه‌ی transitions.dev،
+ * درون‌ریزی‌شده با تمِ اپ. رنگ از --dangerِ خودِ تم می‌آید نه یک قرمزِ ثابت،
+ * پس در تمِ روشن/تیره و زیرِ تینتِ اسپاتیفاییِ نوارِ پخش هم درست می‌ماند.
+ *
+ * pop روی لفافِ HTML (`.like-pop`) است نه خودِ <svg>: ترنسفورمِ svgِ درون‌خطی
+ * در Chromium آن را در hi-DPI پیکسلی رَستِر می‌کند؛ لفاف بردار را شفاف نگه
+ * می‌دارد. prefers-reduced-motion را همان قاعده‌ی سراسریِ بالای همین فایل
+ * می‌گیرد (animation-duration: 0.01ms)، پس اینجا تکرار نمی‌شود.
+ */
+:root {
+  --like-fill: 150ms;
+  --like-pop: 350ms;
+  --like-pop-ease: cubic-bezier(0.34, 1.96, 0.64, 1);
+  --like-particle-dur: 600ms;
+  --like-particle-size: 2.5px;
+  --like-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+.like-heart {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: currentColor;
+  cursor: pointer;
+}
+.like-heart .like-pop {
+  display: grid;
+  place-items: center;
+  color: inherit;
+  transition: color var(--like-fill) var(--like-ease);
+}
+.like-heart[data-liked='true'] .like-pop {
+  color: var(--like);
+  animation: like-pop var(--like-pop) var(--like-pop-ease);
+}
+@keyframes like-pop {
+  0% { transform: scale(1); }
+  30% { transform: scale(0.82); }
+  100% { transform: scale(1); }
+}
+.like-particles {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  color: var(--like);
+}
+.like-particles i {
+  position: absolute;
+  left: calc(var(--like-particle-size) * var(--psize, 1) / -2);
+  top: calc(var(--like-particle-size) * var(--psize, 1) / -2);
+  width: calc(var(--like-particle-size) * var(--psize, 1));
+  height: calc(var(--like-particle-size) * var(--psize, 1));
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0;
+}
+@keyframes like-burst {
+  0% { opacity: 0; transform: translate(0, 0) scale(0.4); }
+  20% { opacity: 1; transform: translate(calc(var(--px) * 0.25), calc(var(--py) * 0.25)) scale(1); }
+  100% { opacity: 0; transform: translate(var(--px), var(--py)) scale(var(--p-end-scale, 0.6)); }
+}
+.like-heart.is-bursting .like-particles i {
+  animation: like-burst var(--pdur, var(--like-particle-dur)) ease-out var(--pdelay, 0ms) forwards;
+}
+

@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from ..config import LRCLIB_API
+from ..config import LRCLIB_API, PROXY
 
 # LRCLIB در راهنمایش می‌خواهد کلاینت خودش را معرفی کند
 _HEADERS = {"user-agent": "Unstream/0.2 (https://github.com/unstream)"}
@@ -47,7 +47,9 @@ def fetch(title: str, artist: str, album: str | None, duration_ms: int) -> Lyric
     seconds = round(duration_ms / 1000) if duration_ms else None
 
     try:
-        with httpx.Client(timeout=_TIMEOUT, headers=_HEADERS, follow_redirects=True) as client:
+        with httpx.Client(
+            timeout=_TIMEOUT, headers=_HEADERS, follow_redirects=True, proxy=PROXY
+        ) as client:
             params: dict[str, str] = {"track_name": title, "artist_name": artist}
             if album:
                 params["album_name"] = album

@@ -1,31 +1,55 @@
 import { digits } from '../lib/format'
 import { useI18n } from '../lib/i18n'
-import type { Album, Artist } from '../lib/types'
-import Artwork from './Artwork'
+import { SOURCE_LABEL, type Album, type Artist, type Playlist } from '../lib/types'
+import Artwork, { ArtBackdrop } from './Artwork'
+import SendToTelegram from './SendToTelegram'
 import SourceBadge from './SourceBadge'
 import { PlayIcon } from './icons'
+import SourceLogo, { SOURCE_COLOR } from './logos'
 
 /**
  * کارت‌های مشترکِ نتایج جستجو و صفحه‌ی هنرمند.
- * جدا شدند چون هر دو صفحه دقیقاً همین دو کارت را می‌خواهند.
+ * جدا شدند چون هر دو صفحه دقیقاً همین کارت‌ها را می‌خواهند.
  */
 
 export function ArtistCard({ artist, onOpen }: { artist: Artist; onOpen: () => void }) {
+  const { lang } = useI18n()
   return (
     <button
       onClick={onOpen}
-      className="group flex flex-col items-center gap-2 rounded-xl p-2 text-center transition hover:bg-panel-2"
+      className="group flex w-full flex-col items-center gap-2 rounded-xl p-2 text-center transition hover:bg-panel-2"
     >
-      <Artwork
-        src={artist.artworkUrl}
-        alt={artist.name}
-        seed={artist.id}
-        rounded="rounded-full"
-        className="aspect-square w-full transition group-hover:scale-[1.03]"
-      />
+      <div className="relative w-full">
+        <span
+          aria-hidden
+          className="src-glow pointer-events-none absolute -inset-2 -z-10 rounded-full blur-xl"
+          style={{ '--src': SOURCE_COLOR[artist.source] } as React.CSSProperties}
+        />
+        <Artwork
+          src={artist.artworkUrl}
+          alt={artist.name}
+          seed={artist.id}
+          rounded="rounded-full"
+          className="aspect-square w-full shadow-lg shadow-black/25 transition group-hover:scale-[1.03]"
+        />
+        {/*
+          یک هنرمند از چهار کاتالوگ چهار کارت دارد و هر کارت به صفحه‌ی همان
+          پلتفرم می‌رود. بدون این نشان، چهار دایره‌ی هم‌نام شبیه باگ به نظر
+          می‌رسند — نه شبیه انتخاب.
+        */}
+        <span
+          title={SOURCE_LABEL[artist.source]}
+          className="absolute bottom-0 end-0 grid size-6 place-items-center rounded-full border border-line bg-panel shadow-sm"
+        >
+          <SourceLogo source={artist.source} className="size-3.5" />
+        </span>
+      </div>
       <div className="w-full">
         <p className="bidi-center truncate text-xs">{artist.name}</p>
-        <p className="truncate text-[10px] text-muted-2">{artist.subtitle}</p>
+        {/* زیرنویسِ سرور («76 آلبوم»، «11,365 دنبال‌کننده») ارقامِ لاتین دارد —
+            در حالتِ فارسی باید فارسی شوند؛ کشِ کاتالوگ هم قدیمی را نگه می‌دارد
+            پس تبدیل همین‌جا انجام می‌شود نه سمت سرور */}
+        <p className="truncate text-[10px] text-muted-2">{digits(artist.subtitle, lang)}</p>
       </div>
     </button>
   )
@@ -34,28 +58,80 @@ export function ArtistCard({ artist, onOpen }: { artist: Artist; onOpen: () => v
 export function AlbumCard({ album, onOpen }: { album: Album; onOpen: () => void }) {
   const { lang } = useI18n()
   return (
-    <button onClick={onOpen} className="group rounded-xl p-2 text-start transition hover:bg-panel-2">
-      <div className="relative">
-        <Artwork
-          src={album.artworkUrl}
-          alt={album.title}
-          seed={album.id}
-          className="aspect-square w-full"
-        />
-        <span className="absolute inset-0 grid place-items-center rounded-lg bg-black/45 opacity-0 transition group-hover:opacity-100">
-          <span className="grid size-9 place-items-center rounded-full bg-accent text-accent-fg">
-            <PlayIcon className="size-4" />
+    // دکمه‌ی تلگرام بیرونِ دکمه‌ی کارت می‌نشیند نه تویش: دکمه در دکمه HTML
+    // نامعتبر است و کلیکش هم به کارت نشت می‌کرد (یعنی آلبوم باز می‌شد)
+    <div className="group relative">
+      <SendToTelegram
+        target={{ kind: 'album', ref: album.sourceUrl || album.id, title: album.title }}
+        hoverOnly
+        // روی کاور می‌نشیند نه روی پنل، پس سفید می‌ماند — و `!` لازم است چون
+        // خاکستریِ پیش‌فرضِ خودِ دکمه هم‌وزنِ این کلاس است و ترتیبشان تضمینی نیست
+        className="absolute start-3.5 top-3.5 z-10 bg-black/55 text-white! backdrop-blur-sm hover:bg-black/75"
+      />
+      <button
+        onClick={onOpen}
+        className="relative block w-full overflow-hidden rounded-xl p-2 text-start transition hover:bg-panel-2"
+      >
+        <ArtBackdrop src={album.artworkUrl} seed={album.id} />
+        <div className="relative w-full">
+          <span
+            aria-hidden
+            className="src-glow pointer-events-none absolute -inset-2 -z-10 rounded-xl blur-xl"
+            style={{ '--src': SOURCE_COLOR[album.source] } as React.CSSProperties}
+          />
+          <Artwork
+            src={album.artworkUrl}
+            alt={album.title}
+            seed={album.id}
+            className="aspect-square w-full shadow-lg shadow-black/25"
+          />
+          <span className="absolute inset-0 grid place-items-center rounded-lg bg-black/45 opacity-0 transition group-hover:opacity-100">
+            <span className="grid size-9 place-items-center rounded-full bg-accent text-accent-fg">
+              <PlayIcon className="size-4" />
+            </span>
           </span>
-        </span>
-        <span className="absolute end-1.5 top-1.5 opacity-0 transition group-hover:opacity-100">
-          <SourceBadge source={album.source} />
-        </span>
+          <span className="hover-reveal absolute end-1.5 top-1.5 opacity-0 transition group-hover:opacity-100">
+            <SourceBadge source={album.source} />
+          </span>
+        </div>
+        <p className="bidi mt-2 truncate text-xs">{album.title}</p>
+        <p className="truncate text-[10px] text-muted-2">
+          <bdi>{album.artist}</bdi>
+          {album.year ? ` · ${digits(album.year, lang)}` : ''}
+        </p>
+      </button>
+    </div>
+  )
+}
+
+/**
+ * ردیفِ پلی‌لیست — در نتایج جستجو و در صفحه‌ی کاربر/هنرمند.
+ *
+ * تعداد ترک وقتی صفر است اصلاً نوشته نمی‌شود، چون صفر اینجا یعنی «نمی‌دانیم»
+ * نه «خالی»: صفحه‌ی پروفایلِ اسپاتیفای و تبِ پلی‌لیست‌های یوتیوب تعداد را
+ * نمی‌دهند و «۰ آهنگ» زیرِ پلی‌لیستِ صدتایی، دروغِ صریح بود.
+ */
+export function PlaylistRow({ playlist, onOpen }: { playlist: Playlist; onOpen: () => void }) {
+  const { t } = useI18n()
+  return (
+    <button
+      onClick={onOpen}
+      className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-start transition hover:bg-panel-2"
+    >
+      <Artwork
+        src={playlist.artworkUrl}
+        alt={playlist.title}
+        seed={playlist.id}
+        className="size-10 shrink-0"
+      />
+      <div className="min-w-0 flex-1">
+        <p className="bidi truncate text-sm">{playlist.title}</p>
+        <p className="truncate text-xs text-muted">
+          {playlist.trackCount > 0 && `${t.trackCount(playlist.trackCount)} · `}
+          <bdi>{playlist.owner}</bdi>
+        </p>
       </div>
-      <p className="bidi mt-2 truncate text-xs">{album.title}</p>
-      <p className="truncate text-[10px] text-muted-2">
-        <bdi>{album.artist}</bdi>
-        {album.year ? ` · ${digits(album.year, lang)}` : ''}
-      </p>
+      <SourceBadge source={playlist.source} />
     </button>
   )
 }

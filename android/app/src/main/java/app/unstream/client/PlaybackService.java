@@ -1,0 +1,366 @@
+package app.unstream.client;
+
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.app.Service;
+import android.content.Context;
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.os.Build;
+import android.os.IBinder;
+import android.os.PowerManager;
+import android.support.v4.media.MediaMetadataCompat;
+import android.support.v4.media.session.MediaSessionCompat;
+import android.support.v4.media.session.PlaybackStateCompat;
+
+import androidx.annotation.Nullable;
+import androidx.core.app.NotificationCompat;
+import androidx.media.app.NotificationCompat.MediaStyle;
+import androidx.media.session.MediaButtonReceiver;
+
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+/**
+ * سرویسِ پیش‌زمینه‌ی پخش.
+ *
+ * صدا اینجا پخش *نمی‌شود* — آن کار همچنان مالِ WebView و موتور صوتیِ جاوااسکریپت
+ * است. کارِ این سرویس سه چیز است که وب به‌تنهایی روی اندروید نمی‌تواند:
+ *
+ *  ۱. پروسه را «پیش‌زمینه» نگه می‌دارد، وگرنه اندروید کمی بعد از رفتنِ اپ به
+ *     پس‌زمینه پروسه را می‌کشد و پخش وسطِ آهنگ قطع می‌شود.
+ *  ۲. یک نوتیفیکیشنِ مدیا با کاور و دکمه‌های پخش می‌سازد — همان چیزی که کاربر
+ *     از هر پخش‌کننده‌ی اندرویدی انتظار دارد، و روی صفحه‌ی قفل هم می‌آید.
+ *  ۳. دکمه‌های رسانه‌ایِ سخت‌افزاری (هدفون، بلوتوثِ ماشین) را می‌گیرد.
+ *
+ * `navigator.mediaSession` داخل WebView هیچ‌کدام از این‌ها را نمی‌دهد؛ آن API
+ * فقط در خودِ کروم به نوتیفیکیشن وصل است، نه در WebViewی که اپ میزبانش است.
+ */
+public class PlaybackService extends Service {
+
+    public static final String ACTION_SYNC = "app.unstream.client.SYNC";
+    public static final String ACTION_STOP = "app.unstream.client.STOP";
+
+    private static final String CHANNEL_ID = "unstream.playback";
+    private static final int NOTIFICATION_ID = 0x555;
+
+    /** رابطِ برگشت به جاوااسکریپت — پلاگین خودش را اینجا ثبت می‌کند */
+    public interface TransportListener {
+        void onTransport(String action, long value);
+    }
+
+    @Nullable
+    private static TransportListener listener;
+
+    public static void setListener(@Nullable TransportListener value) {
+        listener = value;
+    }
+
+    private static void emit(String action, long value) {
+        TransportListener current = listener;
+        if (current != null) current.onTransport(action, value);
+    }
+
+    private MediaSessionCompat session;
+    private PowerManager.WakeLock wakeLock;
+    private final ExecutorService artworkPool = Executors.newSingleThreadExecutor();
+
+    /* آخرین متادیتای دریافتی — نوتیفیکیشن با هر همگام‌سازی از همین‌ها بازساخته می‌شود */
+    private String title = "";
+    private String artist = "";
+    private String album = "";
+    private String artworkUrl = "";
+    private boolean playing = false;
+    private long positionMs = 0;
+    private long durationMs = 0;
+
+    /*
+     * کاورِ دانلودشده کش می‌شود. بدون این، هر تیکِ موقعیت (هر ثانیه) یک درخواستِ
+     * شبکه برای همان تصویر می‌فرستاد.
+     */
+    @Nullable
+    private Bitmap artwork;
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        createChannel();
+
+        session = new MediaSessionCompat(this, "unstream");
+        session.setCallback(new MediaSessionCompat.Callback() {
+            @Override
+            public void onPlay() {
+                emit("play", 0);
+            }
+
+            @Override
+            public void onPause() {
+                emit("pause", 0);
+            }
+
+            @Override
+            public void onSkipToNext() {
+                emit("next", 0);
+            }
+
+            @Override
+            public void onSkipToPrevious() {
+                emit("prev", 0);
+            }
+
+            @Override
+            public void onStop() {
+                emit("stop", 0);
+            }
+
+            @Override
+            public void onSeekTo(long pos) {
+                emit("seek", pos);
+            }
+        });
+        session.setActive(true);
+
+        /*
+         * قفلِ بیداریِ نیمه: پردازنده بیدار می‌ماند ولی صفحه خاموش می‌شود. بدون
+         * آن، با خاموش‌شدنِ صفحه تایمرهای WebView کند می‌شوند و پخش می‌لنگد.
+         * فقط تا وقتی چیزی در حال پخش است گرفته می‌شود.
+         */
+        PowerManager power = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        wakeLock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "unstream:playback");
+        wakeLock.setReferenceCounted(false);
+    }
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        if (intent == null) {
+            stopSelf();
+            return START_NOT_STICKY;
+        }
+
+        if (ACTION_STOP.equals(intent.getAction())) {
+            shutdown();
+            return START_NOT_STICKY;
+        }
+
+        if (ACTION_SYNC.equals(intent.getAction())) {
+            title = orEmpty(intent.getStringExtra("title"));
+            artist = orEmpty(intent.getStringExtra("artist"));
+            album = orEmpty(intent.getStringExtra("album"));
+            playing = intent.getBooleanExtra("playing", false);
+            positionMs = intent.getLongExtra("position", 0);
+            durationMs = intent.getLongExtra("duration", 0);
+
+            String url = orEmpty(intent.getStringExtra("artworkUrl"));
+            if (!url.equals(artworkUrl)) {
+                artworkUrl = url;
+                artwork = null;
+                loadArtwork(url);
+            }
+
+            publish();
+        }
+
+        // دکمه‌های هدفون و بلوتوث از همین‌جا به سشن می‌رسند
+        MediaButtonReceiver.handleIntent(session, intent);
+        return START_NOT_STICKY;
+    }
+
+    /** متادیتا + وضعیت + نوتیفیکیشن را با هم به‌روز می‌کند */
+    private void publish() {
+        session.setMetadata(new MediaMetadataCompat.Builder()
+                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
+                .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
+                .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, album)
+                .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, durationMs)
+                .putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, artwork)
+                .build());
+
+        session.setPlaybackState(new PlaybackStateCompat.Builder()
+                .setActions(PlaybackStateCompat.ACTION_PLAY
+                        | PlaybackStateCompat.ACTION_PAUSE
+                        | PlaybackStateCompat.ACTION_PLAY_PAUSE
+                        | PlaybackStateCompat.ACTION_SKIP_TO_NEXT
+                        | PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
+                        | PlaybackStateCompat.ACTION_SEEK_TO
+                        | PlaybackStateCompat.ACTION_STOP)
+                .setState(
+                        playing ? PlaybackStateCompat.STATE_PLAYING : PlaybackStateCompat.STATE_PAUSED,
+                        positionMs,
+                        playing ? 1f : 0f)
+                .build());
+
+        Notification notification = buildNotification();
+
+        /*
+         * سرویس فقط تا وقتی «پیش‌زمینه» است که چیزی پخش شود. با مکث از حالتِ
+         * پیش‌زمینه بیرون می‌آید ولی نوتیفیکیشن می‌ماند (DETACH) تا کاربر بتواند
+         * از همان‌جا دوباره ادامه بدهد — و اندروید هم اپِ مکث‌شده را دیگر
+         * «در حال استفاده از منابع» حساب نکند.
+         */
+        if (playing) {
+            startForeground(NOTIFICATION_ID, notification);
+            if (!wakeLock.isHeld()) wakeLock.acquire(3 * 60 * 60 * 1000L);
+        } else {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(Service.STOP_FOREGROUND_DETACH);
+            } else {
+                stopForeground(false);
+            }
+            NotificationManager manager =
+                    (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            manager.notify(NOTIFICATION_ID, notification);
+            if (wakeLock.isHeld()) wakeLock.release();
+        }
+    }
+
+    private Notification buildNotification() {
+        Intent open = new Intent(this, MainActivity.class);
+        open.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent content = PendingIntent.getActivity(
+                this, 0, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+        PendingIntent stop = MediaButtonReceiver.buildMediaButtonPendingIntent(
+                this, PlaybackStateCompat.ACTION_STOP);
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_stat_playback)
+                .setContentTitle(title)
+                .setContentText(artist)
+                .setSubText(album)
+                .setLargeIcon(artwork)
+                .setContentIntent(content)
+                .setDeleteIntent(stop)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setShowWhen(false)
+                .setOnlyAlertOnce(true)
+                .setPriority(NotificationCompat.PRIORITY_LOW);
+
+        builder.addAction(new NotificationCompat.Action(
+                R.drawable.ic_media_prev,
+                getString(R.string.media_prev),
+                MediaButtonReceiver.buildMediaButtonPendingIntent(
+                        this, PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS)));
+
+        builder.addAction(new NotificationCompat.Action(
+                playing ? R.drawable.ic_media_pause : R.drawable.ic_media_play,
+                getString(playing ? R.string.media_pause : R.string.media_play),
+                MediaButtonReceiver.buildMediaButtonPendingIntent(
+                        this, PlaybackStateCompat.ACTION_PLAY_PAUSE)));
+
+        builder.addAction(new NotificationCompat.Action(
+                R.drawable.ic_media_next,
+                getString(R.string.media_next),
+                MediaButtonReceiver.buildMediaButtonPendingIntent(
+                        this, PlaybackStateCompat.ACTION_SKIP_TO_NEXT)));
+
+        builder.setStyle(new MediaStyle()
+                .setMediaSession(session.getSessionToken())
+                // هر سه دکمه در حالتِ جمع‌شده هم دیده می‌شوند
+                .setShowActionsInCompactView(0, 1, 2)
+                .setShowCancelButton(true)
+                .setCancelButtonIntent(stop));
+
+        return builder.build();
+    }
+
+    /**
+     * کاور را در نخِ جدا می‌گیرد و بعد نوتیفیکیشن را دوباره می‌سازد.
+     *
+     * شکستش بی‌صداست: نوتیفیکیشنِ بدون کاور از نبودِ نوتیفیکیشن خیلی بهتر است،
+     * و آدرسِ کاور ممکن است از CDNی بیاید که همان لحظه در دسترس نیست.
+     */
+    private void loadArtwork(final String url) {
+        if (url.isEmpty()) return;
+
+        artworkPool.execute(() -> {
+            Bitmap bitmap = null;
+            HttpURLConnection connection = null;
+            try {
+                connection = (HttpURLConnection) new URL(url).openConnection();
+                connection.setConnectTimeout(8000);
+                connection.setReadTimeout(8000);
+                connection.setInstanceFollowRedirects(true);
+                InputStream stream = connection.getInputStream();
+                BitmapFactory.Options options = new BitmapFactory.Options();
+                // کاورِ سه‌هزارپیکسلی برای نوتیفیکیشن اسراف است و حافظه را می‌خورد
+                options.inSampleSize = 2;
+                bitmap = BitmapFactory.decodeStream(stream, null, options);
+                stream.close();
+            } catch (Exception ignored) {
+                // بدون کاور ادامه می‌دهیم
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+
+            if (bitmap == null) return;
+            // نتیجه‌ی کاورِ ترکِ قبلی نباید روی ترکِ فعلی بنشیند
+            if (!url.equals(artworkUrl)) return;
+
+            artwork = bitmap;
+            publish();
+        });
+    }
+
+    private void shutdown() {
+        if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
+        session.setActive(false);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(Service.STOP_FOREGROUND_REMOVE);
+        } else {
+            stopForeground(true);
+        }
+        stopSelf();
+    }
+
+    private void createChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
+        NotificationManager manager =
+                (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager.getNotificationChannel(CHANNEL_ID) != null) return;
+
+        NotificationChannel channel = new NotificationChannel(
+                CHANNEL_ID,
+                getString(R.string.channel_playback),
+                // IMPORTANCE_LOW: نوتیفیکیشنِ پخش نباید صدا یا لرزش بدهد
+                NotificationManager.IMPORTANCE_LOW);
+        channel.setDescription(getString(R.string.channel_playback_desc));
+        channel.setShowBadge(false);
+        channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+        manager.createNotificationChannel(channel);
+    }
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        /*
+         * کاربر اپ را از لیستِ اپ‌های اخیر بیرون انداخته. اگر چیزی پخش نمی‌شود
+         * سرویس هم باید برود — وگرنه یک نوتیفیکیشنِ یتیم می‌ماند که هیچ صدایی
+         * پشتش نیست. اگر پخش ادامه دارد، عمداً زنده می‌ماند.
+         */
+        if (!playing) shutdown();
+        super.onTaskRemoved(rootIntent);
+    }
+
+    @Override
+    public void onDestroy() {
+        if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
+        session.release();
+        artworkPool.shutdownNow();
+        super.onDestroy();
+    }
+
+    @Nullable
+    @Override
+    public IBinder onBind(Intent intent) {
+        return null;
+    }
+
+    private static String orEmpty(@Nullable String value) {
+        return value == null ? "" : value;
+    }
+}

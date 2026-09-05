@@ -1,0 +1,115 @@
+apply plugin: 'com.android.application'
+
+/*
+ * کلیدِ امضا.
+ *
+ * از `keystore.properties` خوانده می‌شود که در `.gitignore` است و هیچ‌وقت
+ * کامیت نمی‌شود. نبودنش خطا نیست: بیلدِ دیباگ و بررسیِ کامپایل بدونِ کلید هم
+ * باید کار کنند، فقط خروجیِ release امضا نمی‌شود.
+ *
+ * ساختنِ کلید (یک‌بار، و فایلِ حاصل را جایی امن نگه دار — با گم‌شدنش دیگر
+ * نمی‌شود همین اپ را آپدیت کرد):
+ *
+ *   keytool -genkeypair -v -keystore android/unstream.jks -keyalg RSA  *           -keysize 2048 -validity 10000 -alias unstream
+ *
+ * بعد `android/keystore.properties`:
+ *
+ *   storeFile=unstream.jks
+ *   storePassword=…
+ *   keyAlias=unstream
+ *   keyPassword=…
+ */
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('keystore.properties')
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
+android {
+    namespace = "app.unstream.client"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "app.unstream.client"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        release {
+            if (keystoreProperties.containsKey('storeFile')) {
+                storeFile rootProject.file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            /*
+             * کوچک‌سازی روشن است. قواعدِ لازم برای پلاگین‌ها را خودِ AAR
+             * کاپاسیتور با خودش می‌آورد (`-keep public class * extends
+             * com.getcapacitor.Plugin`)، پس پلاگین‌های سفارشیِ این پروژه هم
+             * که از همان کلاس ارث می‌برند دست‌نخورده می‌مانند.
+             */
+            minifyEnabled true
+            // منابعِ بلااستفاده هم بروند — بیشترِ حجمِ APK همین‌هاست، نه کد
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+
+            if (keystoreProperties.containsKey('storeFile')) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+
+    /*
+     * زبانِ رابط داخلِ خودِ وب‌اپ است و منابعِ اندروید فقط چند رشته‌ی
+     * نوتیفیکیشن‌اند. بدونِ این، AAPT ترجمه‌های همه‌ی کتابخانه‌های androidx را
+     * برای ~۸۰ زبان داخلِ APK می‌ریزد.
+     */
+    bundle {
+        language {
+            enableSplit = false
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    // MediaSessionCompat + نوتیفیکیشنِ MediaStyle برای پخشِ پس‌زمینه
+    implementation "androidx.media:media:$androidxMediaVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

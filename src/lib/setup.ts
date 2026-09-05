@@ -1,0 +1,136 @@
+import { apiUrl } from './server'
+
+/**
+ * لایه‌ی ارتباط با ویزاردِ راه‌اندازی (`server/app/setup.py`).
+ *
+ * جدا از `MusicApi` است چون آن اینترفیس را مود دمو هم پیاده می‌کند، و در مود
+ * دمو هیچ سروری نیست که بشود از کلید پرسید. این‌ها فقط در `VITE_API_MODE=http`
+ * صدا زده می‌شوند.
+ */
+
+export type SetupKey =
+  | 'UNSTREAM_SPOTIFY_CLIENT_ID'
+  | 'UNSTREAM_SPOTIFY_CLIENT_SECRET'
+  | 'UNSTREAM_GENIUS_ACCESS_TOKEN'
+  | 'UNSTREAM_ACOUSTID_KEY'
+  | 'UNSTREAM_AUDD_TOKEN'
+  | 'UNSTREAM_ANTHROPIC_API_KEY'
+  | 'UNSTREAM_TELEGRAM_BOT_TOKEN'
+  | 'UNSTREAM_PROXY'
+  | 'UNSTREAM_YTDLP_PROXY'
+  | 'UNSTREAM_COOKIES_FILE'
+  | 'UNSTREAM_COOKIES_BROWSER'
+
+export type TestGroup =
+  | 'spotify'
+  | 'genius'
+  | 'acoustid'
+  | 'audd'
+  | 'anthropic'
+  | 'telegram'
+  | 'proxy'
+
+export interface SetupState {
+  done: boolean
+  /** کلیدهایی که از قبل ست‌اند — فقط ۴ رقمِ آخر، نه خودِ کلید */
+  set: Partial<Record<SetupKey, string>>
+  /** چیزی روی دیسک هست که سرور هنوز نخوانده */
+  restartNeeded: boolean
+  env: {
+    ffmpeg: boolean
+    jsRuntime: string | null
+    potoken: boolean
+    cookies: boolean
+    proxy: boolean
+    internet: boolean
+    container: boolean
+  }
+}
+
+export interface TestResult {
+  ok: boolean
+  detail: string
+}
+
+/**
+ * `null` یعنی سرور جواب نداد — که با «جواب داد و گفت تنظیم نیست» یکی نیست.
+ * در حالتِ اول دروازه‌ی ویزارد باز نمی‌ماند؛ `OfflineBar` همان کار را بهتر می‌کند.
+ */
+export async function fetchSetupState(signal?: AbortSignal): Promise<SetupState | null> {
+  try {
+    const res = await fetch(apiUrl('/api/setup'), { signal })
+    return res.ok ? ((await res.json()) as SetupState) : null
+  } catch {
+    return null
+  }
+}
+
+export async function testSetupKey(
+  key: TestGroup,
+  values: Partial<Record<SetupKey, string>>,
+  signal?: AbortSignal,
+): Promise<TestResult> {
+  const res = await fetch(apiUrl('/api/setup/test'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ key, values }),
+    signal,
+  })
+  if (!res.ok) return { ok: false, detail: await errorText(res) }
+  return (await res.json()) as TestResult
+}
+
+export async function saveSetup(
+  values: Partial<Record<SetupKey, string>>,
+  opts: { restart?: boolean; done?: boolean } = {},
+): Promise<{ ok: boolean; changed: string[]; restarting: boolean; manualRestart: boolean }> {
+  const res = await fetch(apiUrl('/api/setup/save'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ values, restart: opts.restart ?? true, done: opts.done ?? false }),
+  })
+  if (!res.ok) throw new Error(await errorText(res))
+  return res.json()
+}
+
+export async function uploadCookies(file: File): Promise<{ ok: boolean; youtube: number; cookies: number }> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch(apiUrl('/api/setup/cookies'), { method: 'POST', body: form })
+  if (!res.ok) throw new Error(await errorText(res))
+  return res.json()
+}
+
+/** پیامِ خودِ بک‌اند را نشان بده، نه `400 Bad Request` خشک */
+async function errorText(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as { detail?: string }
+    if (typeof body.detail === 'string') return body.detail
+  } catch {
+    // بدنه JSON نبود
+  }
+  return `${res.status} ${res.statusText}`
+}
+
+/**
+ * تا سرور برگردد صبر می‌کند.
+
+ * ری‌استارت از سمتِ خودِ سرور انجام می‌شود، پس مرورگر نمی‌تواند منتظرِ پاسخِ
+ * همان درخواست بماند — آن درخواست با سرور می‌میرد. تنها راهِ دیدنِ «بالا آمد»،
+ * پرسیدنِ دوباره است.
+ */
+export async function waitForServer(timeoutMs = 45_000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs
+  // یک‌ایستِ کوتاه قبل از اولین پرسش: سرور هنوز نفرستاده که دارد می‌میرد
+  await new Promise((r) => setTimeout(r, 1200))
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(apiUrl('/api/health'), { cache: 'no-store' })
+      if (res.ok) return true
+    } catch {
+      // در حالِ خاموش/روشن شدن — طبیعی است
+    }
+    await new Promise((r) => setTimeout(r, 1000))
+  }
+  return false
+}

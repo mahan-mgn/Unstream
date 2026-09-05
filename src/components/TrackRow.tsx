@@ -11,6 +11,7 @@ import type { Track } from '../lib/types'
 import { isActive, useDownloads, useTrackJob } from '../store/downloads'
 import { useSettings } from '../store/settings'
 import Artwork from './Artwork'
+import SendToTelegram from './SendToTelegram'
 import SourceBadge from './SourceBadge'
 import {
   CheckIcon,
@@ -45,8 +46,10 @@ export default function TrackRow({
   onTogglePlay,
   showSource = false,
 }: Props) {
-  const job = useTrackJob(track.id)
   const quality = useSettings((s) => s.quality)
+  // با همان کیفیتی که دکمه‌ی این ردیف دانلود را ثبت می‌کند — وگرنه ردیف
+  // وضعیتِ یک دانلودِ دیگر (کیفیتِ دیگر) را نشان می‌دهد
+  const job = useTrackJob(track.id, quality)
   const { enqueue, cancel, retry } = useDownloads()
   const { t, lang } = useI18n()
   const playing = playingId === track.id
@@ -74,7 +77,7 @@ export default function TrackRow({
 
   return (
     <div
-      className={`group relative flex items-center gap-3 overflow-hidden rounded-lg px-2 py-2 transition ${
+      className={`group relative flex items-center gap-2 overflow-hidden rounded-lg px-1.5 py-2 transition sm:gap-3 sm:px-2 ${
         selected ? 'bg-accent-dim' : 'hover:bg-panel-2'
       }`}
     >
@@ -82,12 +85,12 @@ export default function TrackRow({
       {busy && (
         <>
           <div
-            className="pointer-events-none absolute inset-y-0 start-0 bg-accent/8 transition-[width] duration-200 ease-linear"
-            style={{ width: `${fill}%` }}
+            className="pointer-events-none absolute inset-0 origin-left rtl:origin-right bg-accent/8 transition-transform duration-200 ease-linear"
+            style={{ transform: `scaleX(${fill / 100})` }}
           />
           <div
-            className="pointer-events-none absolute bottom-0 start-0 h-[2px] bg-accent transition-[width] duration-200 ease-linear"
-            style={{ width: `${fill}%` }}
+            className="pointer-events-none absolute bottom-0 inset-x-0 h-[2px] origin-left rtl:origin-right bg-accent transition-transform duration-200 ease-linear"
+            style={{ transform: `scaleX(${fill / 100})` }}
           />
         </>
       )}
@@ -98,7 +101,7 @@ export default function TrackRow({
           role="checkbox"
           aria-checked={selected}
           aria-label={t.selectTrack(track.title)}
-          className={`relative grid size-4 shrink-0 place-items-center rounded border transition ${
+          className={`relative grid size-5 shrink-0 place-items-center rounded border transition sm:size-4 ${
             selected ? 'border-accent bg-accent text-accent-fg' : 'border-muted-2 hover:border-fg'
           }`}
         >
@@ -127,8 +130,10 @@ export default function TrackRow({
         <p className="bidi truncate text-xs text-muted">{track.artist}</p>
       </div>
 
-      <div className="relative flex shrink-0 items-center gap-1">
-        {statusText && <span className="me-1 text-[11px] text-muted">{statusText}</span>}
+      <div className="relative flex shrink-0 items-center gap-0.5 sm:gap-1">
+        {/* روی موبایل، پیشرفت را همان پرشدنِ پس‌زمینه‌ی ردیف می‌گوید — متنِ
+            وضعیت فقط عرضی می‌خورد که عنوان آهنگ لازمش دارد */}
+        {statusText && <span className="me-1 hidden text-[11px] text-muted sm:inline">{statusText}</span>}
 
         {job?.status === 'error' && (
           <button
@@ -144,14 +149,14 @@ export default function TrackRow({
         <button
           onClick={() => onTogglePlay(track)}
           aria-label={playing ? t.stopPreview : t.preview}
-          className={`grid size-7 place-items-center rounded-md transition hover:bg-panel-2 ${
+          className={`grid size-8 place-items-center rounded-md transition hover:bg-panel-2 sm:size-7 ${
             playing ? 'text-accent' : 'text-muted hover:text-fg'
           }`}
         >
           {playing ? <PauseIcon className="size-4" /> : <PlayIcon className="size-4" />}
         </button>
 
-        <span className="w-9 text-center text-[11px] tabular-nums text-muted-2">
+        <span className="hidden w-9 text-center text-[11px] tabular-nums text-muted-2 sm:inline">
           {fmtDuration(track.durationMs, lang)}
         </span>
 
@@ -164,6 +169,8 @@ export default function TrackRow({
             <WarnIcon className="size-4" />
           </span>
         )}
+
+        <SendToTelegram target={{ kind: 'track', track }} />
 
         {job?.lyricsUrl && (
           <a
@@ -195,7 +202,7 @@ export default function TrackRow({
           <button
             onClick={() => cancel(job!.id)}
             aria-label={t.cancelDownload}
-            className="grid size-7 place-items-center rounded-md text-accent transition hover:bg-panel-2"
+            className="grid size-8 place-items-center rounded-md text-accent transition hover:bg-panel-2 sm:size-7"
           >
             <Spinner className="size-4" />
           </button>
@@ -205,7 +212,7 @@ export default function TrackRow({
               enqueue(track, quality, { title: track.album ?? track.title })
             }
             aria-label={t.downloadTrack(track.title)}
-            className="grid size-7 place-items-center rounded-md text-muted transition hover:bg-panel-2 hover:text-fg"
+            className="grid size-8 place-items-center rounded-md text-muted transition hover:bg-panel-2 hover:text-fg sm:size-7"
           >
             <DownloadIcon className="size-4" />
           </button>

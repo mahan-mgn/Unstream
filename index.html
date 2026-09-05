@@ -2,13 +2,30 @@
 <html lang="fa" dir="rtl" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>آنستریم — دانلود موزیک، آلبوم و پلی‌لیست</title>
-    <link
-      rel="stylesheet"
-      href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css"
+    <!--
+      viewport-fit=cover لازمه‌ی env(safe-area-inset-*) است — بدونش روی آیفون
+      حاشیه‌های امن همیشه صفر برمی‌گردند و نوار پخش زیر خطِ خانه می‌رود.
+      interactive-widget=resizes-content: با باز شدن کیبورد، محتوا کوچک می‌شود
+      به‌جای اینکه نوارهای ثابتِ پایین بپرند وسط صفحه.
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
     />
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🎧</text></svg>" />
+    <!-- رنگ نوار مرورگر با تم صفحه هماهنگ می‌شود، نه همیشه تیره -->
+    <meta name="theme-color" content="#070707" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f7f7f5" media="(prefers-color-scheme: light)" />
+    <!-- iOS «افزودن به صفحه‌ی اصلی» را تمام‌صفحه (بدون نوار مرورگر) می‌کند -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="آنستریم" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <!-- سافاری وگرنه شماره‌ی تلفن و تاریخ را داخل عنوان آهنگ‌ها لینک می‌کند -->
+    <meta name="format-detection" content="telephone=no" />
+    <title>آنستریم — دانلود موزیک، آلبوم و پلی‌لیست</title>
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png" />
   </head>
   <body>
     <div id="root"></div>

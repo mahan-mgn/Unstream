@@ -1,9 +1,12 @@
+import { IdentifyUnavailable } from '../types'
 import type {
   AlbumDetail,
   DownloadProgress,
   DownloadRequest,
   MusicApi,
   SearchResults,
+  VibeInput,
+  VibeSuggestion,
 } from '../types'
 import {
   ALBUMS,
@@ -33,7 +36,34 @@ function seeded(key: string): number {
   return ((h >>> 0) % 1000) / 1000
 }
 
+/** برچسب/پاسخِ هر چیپ در مود دمو — چیزی سبک، بدون نیاز به سرور یا LLM */
+const VIBE_LABELS: Record<string, string> = {
+  sad: '😢 غمگین',
+  happy: '😊 شاد',
+  energetic: '🔥 پرانرژی',
+  calm: '😌 آرام',
+  romantic: '❤️ عاشقانه',
+  angry: '😤 عصبانی',
+  discover: '🎵 پیشنهادی',
+}
+
+const VIBE_REPLIES: Record<string, string> = {
+  sad: 'می‌دونم حس بدی داری. این چندتا رو گذاشتم برات.',
+  happy: 'عالیه! بزن بریم با یه پلی‌لیست شاد.',
+  energetic: 'بریم رو دور تند!',
+  calm: 'باشه، بریم رو یه ریتم آروم.',
+  romantic: 'چه حس قشنگی.',
+  angry: 'بریزش بیرون.',
+  discover: 'در مود دمو یه لیست نمونه برات آوردم — بک‌اند واقعی که وصل باشه، بر اساس حالت پیدا می‌کنه.',
+}
+
 export const mockApi: MusicApi = {
+  async netStatus() {
+    // مود دمو سروری ندارد که وضعیتِ شبکه‌اش را بپرسد؛ `null` یعنی «نمی‌دانم»
+    // و UI هیچ نوارِ اینترانتی نشان نمی‌دهد — نه اینکه ادعای آنلاین بودن کند
+    return null
+  },
+
   async search(query, signal) {
     await wait(700 + seeded(query) * 600, signal)
     const results: SearchResults = {
@@ -72,6 +102,28 @@ export const mockApi: MusicApi = {
   },
 
   async removeFromLibrary() {},
+
+  async toggleFavorite() {},
+
+  async recordPlay() {},
+
+  async stats() {
+    // آمار روی جدولِ پخشِ سرور ساخته می‌شود؛ مود دمو سروری ندارد
+    return null
+  },
+
+  async favorites() {
+    return null
+  },
+
+  async dailyMix() {
+    return null
+  },
+
+  async candidates() {
+    // انتخاب دستی به جستجوی واقعی در یوتیوب/ساندکلاد نیاز دارد
+    return null
+  },
 
   download({ track, quality }: DownloadRequest, onProgress) {
     let canceled = false
@@ -148,8 +200,106 @@ export const mockApi: MusicApi = {
     }
   },
 
+  async vibeSuggest(input: VibeInput, signal) {
+    await wait(500, signal)
+    const key = input.vibe && VIBE_LABELS[input.vibe] ? input.vibe : 'discover'
+    const exclude = new Set(input.excludeIds ?? [])
+    // تصادفِ واقعی، نه seed ثابت — کلیک‌های پیاپی روی یک چیپ باید پلی‌لیستِ
+    // متفاوت بدهند، و ترک‌هایی که همین گفتگو قبلاً دیده دوباره نمی‌آیند
+    const tracks = [...TOP_TRACKS]
+      .filter((t) => !exclude.has(t.id))
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 8)
+    return {
+      vibe: key,
+      label: VIBE_LABELS[key],
+      reply: VIBE_REPLIES[key],
+      tracks,
+    } satisfies VibeSuggestion
+  },
+
   async zip() {
     // مود دمو فایل واقعی تولید نمی‌کند، پس ZIPی هم در کار نیست
     return null
+  },
+
+  // هرچه از این پایین می‌آید به فایلِ واقعی روی دیسکِ سرور گره خورده —
+  // شناسایی با فینگرپرینت، تکه‌کردنِ میکس و پلی‌لیستی که روی کتابخانه ساخته
+  // می‌شود. مود دمو هیچ‌کدام را ندارد و null یعنی «این لایه پشتیبانی نمی‌کند»،
+  // که UI بلد است پیام درست را برایش نشان بدهد.
+  async identify(): Promise<never> {
+    throw new IdentifyUnavailable('در مود دمو شناسایی صوتی وجود ندارد.')
+  },
+
+  async chapters() {
+    return null
+  },
+
+  async split() {
+    return null
+  },
+
+  async splitStatus() {
+    return null
+  },
+
+  async playlists() {
+    return null
+  },
+
+  async playlist() {
+    return null
+  },
+
+  async createPlaylist() {
+    return null
+  },
+
+  async renamePlaylist() {},
+
+  async updatePlaylistRule() {},
+
+  async deletePlaylist() {},
+
+  async addToPlaylist() {
+    return 0
+  },
+
+  async removeFromPlaylist() {},
+
+  // مود دمو بات ندارد؛ null یعنی دکمه‌ی تلگرام اصلاً نشان داده نشود
+  async telegramStatus() {
+    return null
+  },
+
+  async telegramPair(): Promise<never> {
+    throw new Error('در مود دمو بات تلگرام وجود ندارد.')
+  },
+
+  async telegramUnlink() {},
+
+  async telegramSend(): Promise<never> {
+    throw new Error('در مود دمو بات تلگرام وجود ندارد.')
+  },
+
+  async telegramSendStatus(): Promise<never> {
+    throw new Error('در مود دمو بات تلگرام وجود ندارد.')
+  },
+
+  // مود دمو بات ندارد، پس دنبال‌کردن هم بی‌معناست؛ دکمه با `usable` پنهان می‌ماند
+  async follows() {
+    return []
+  },
+
+  async followState(): Promise<never> {
+    throw new Error('در مود دمو بات تلگرام وجود ندارد.')
+  },
+
+  async follow(): Promise<never> {
+    throw new Error('در مود دمو بات تلگرام وجود ندارد.')
+  },
+
+  async unfollow(): Promise<never> {
+    throw new Error('در مود دمو بات تلگرام وجود ندارد.')
   },
 }

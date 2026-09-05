@@ -58,14 +58,28 @@ class TestScoring:
         assert score(track, "Cooking pasta in 10 minutes", "FoodChannel") < MIN_SCORE
 
     def test_duration_is_the_strongest_signal(self, track):
-        """عنوانِ یکسان ولی طولِ خیلی متفاوت، تقریباً همیشه ترک اشتباه است."""
+        """عنوانِ یکسان ولی طولِ خیلی متفاوت، جریمه می‌خورد — حتی وقتی متن کامل match است."""
         same = score(track, "Farhad Mehrad - Mard-e Tanha")
         off = score(track, "Farhad Mehrad - Mard-e Tanha", duration_ms=track.durationMs + 90_000)
-        assert same - off == pytest.approx(65, abs=1)  # ۳۰ امتیاز مثبت + ۳۵ منفی
+        # عنوان+هنرمند اینجا کامل match هستند، پس جریمه‌ی نرم‌تر (۱۵) می‌خورد نه ۳۵
+        assert same - off == pytest.approx(45, abs=1)  # ۳۰ امتیاز مثبت + ۱۵ منفی
 
     def test_close_duration_still_scores_well(self, track):
         near = score(track, "Farhad Mehrad - Mard-e Tanha", duration_ms=track.durationMs + 1500)
         assert near >= GOOD_ENOUGH
+
+    def test_exact_text_match_survives_a_big_duration_gap(self, track):
+        """
+        عنوان و هنرمند کاملاً match هستند ولی نسخه‌ی یوتیوب حدود ۵۰ ثانیه
+        بلندتر است (مثلاً کاتِ رادیویی در برابر نسخه‌ی کامل). این معمولاً یعنی
+        همان ترک با کاتِ متفاوت، نه ویدیوی اشتباه — نباید کامل رد شود.
+        """
+        result = score(track, "Farhad Mehrad - Mard-e Tanha", duration_ms=track.durationMs + 49_000)
+        assert result >= MIN_SCORE
+
+    def test_big_duration_gap_with_weak_text_match_is_still_rejected(self, track):
+        """بدون تطابق متنیِ قوی، جریمه‌ی کامل باقی می‌ماند — نرم‌تر شدن فقط برای متنِ تقریباً کامل است."""
+        assert score(track, "Cooking pasta", "FoodChannel", duration_ms=track.durationMs + 90_000) < MIN_SCORE
 
     def test_missing_duration_is_only_mildly_penalized(self, track):
         assert score(track, "Farhad Mehrad - Mard-e Tanha", duration_ms=0) > MIN_SCORE
@@ -112,3 +126,196 @@ class TestScoring:
         with_channel = score(track, "Mard-e Tanha", "Farhad Mehrad - Topic")
         without = score(track, "Mard-e Tanha", "Random Uploads")
         assert with_channel > without
+
+
+class TestModifiedReuploads:
+    """
+    بازنشرهای دستکاری‌شده (8D، slowed، nightcore، bass boosted).
+
+    این‌ها بدترین نوع نتیجه‌ی اشتباه‌اند چون *بی‌سروصدا* اشتباه‌اند: عنوان و
+    هنرمند کاملاً مچ‌اند و مدتشان هم تقریباً همان است، پس امتیازدهی بالاترین
+    نمره را به آن‌ها می‌داد — بالاتر از خودِ ترک. کاربر فایل را می‌گرفت، تگش
+    درست بود، و تازه موقع پخش می‌فهمید صدا عوض شده.
+
+    بدتر اینکه «audio»ی تنها در POSITIVE بود و «8D AUDIO» بابتش جایزه هم
+    می‌گرفت؛ با `GOOD_ENOUGH` که جستجو را همان‌جا متوقف می‌کند، یوتیوب اصلاً
+    پرسیده نمی‌شد.
+    """
+
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "The Neighbourhood - Sweater Weather (8D AUDIO)",
+            "Sweater Weather - The Neighbourhood (Slowed + Reverb)",
+            "Sweater Weather (sped up)",
+            "Sweater Weather - Nightcore",
+            "Sweater Weather (Bass Boosted)",
+            # همان چیزی که به‌جای ترکِ ساندکلادِ «KIR TO RAPFARSI» دانلود شد:
+            # بازنشرِ کلیپ‌شده، با همان عنوان و همان طول
+            "Sweater Weather[Distort Version]",
+        ],
+    )
+    def test_scores_below_the_plain_version(self, track, title):
+        plain = score(track, f"{track.artist} - {track.title}", track.artist)
+        assert score(track, title, "someuser") < plain
+
+    def test_official_upload_still_wins(self, track):
+        official = score(track, f"{track.artist} - {track.title} (Official Audio)", track.artist)
+        plain = score(track, f"{track.artist} - {track.title}", track.artist)
+        assert official > plain
+
+
+class TestNegativeWordBoundaries:
+    """
+    عبارت‌های منفی باید *واژه* باشند، نه زیررشته.
+
+    «live» داخلِ «deliverance» و «alive» هم هست و «cover» داخلِ «discover» —
+    بدون مرزِ واژه، نسخه‌ی کاملاً درست بابتِ چیزی که اصلاً در عنوانش نیست
+    جریمه می‌شد.
+    """
+
+    def test_substring_inside_another_word_is_not_a_penalty(self, track):
+        clean = score(track, f"{track.artist} - {track.title}", track.artist)
+        # «Deliverance» و «Discovery» هیچ‌کدام نسخه‌ی زنده یا کاور نیستند
+        assert score(track, f"{track.artist} - {track.title} (Deliverance Mix)", track.artist) == clean
+        assert score(track, f"{track.artist} - {track.title}", "Discovery Records") == clean
+
+    def test_real_mentions_are_still_penalised(self, track):
+        clean = score(track, f"{track.artist} - {track.title}", track.artist)
+        assert score(track, f"{track.artist} - {track.title} (Live)", track.artist) < clean
+        assert score(track, f"{track.title} - covers band", "someone") < clean
+
+    def test_inflected_forms_count(self, track):
+        clean = score(track, f"{track.artist} - {track.title}", track.artist)
+        # «remixed»/«remixes» همان «remix»‌اند و باید همان جریمه را بگیرند
+        assert score(track, f"{track.title} (remixed)", "dj") < clean
+        assert score(track, f"{track.title} (remixes)", "dj") < clean
+
+
+class TestSourceRetry:
+    """
+    اولویتِ ساندکلاد باید حتی زیرِ خطای گذرا هم حفظ شود.
+
+    قبلاً یک استثنایِ تصادفی در جستجوی ساندکلاد بی‌صدا به یوتیوب می‌رفت — حتی
+    وقتی ترک همان‌جا بود. حالا یک تلاشِ دوباره هست و فقط شکستِ واقعی، منبع را
+    کنار می‌گذارد. «ترک در این منبع نبود» خطا نیست و نباید دوباره‌خواهی بگیرد.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _no_delay(self, monkeypatch):
+        from app import resolver
+
+        monkeypatch.setattr(resolver, "SOURCE_RETRY_DELAY", 0.0)
+
+    def test_transient_error_is_retried_and_succeeds(self, track, monkeypatch):
+        from app import resolver
+        from app.resolver import Candidate
+
+        good = Candidate(
+            url="https://soundcloud.com/x/ajibe",
+            title=track.title,
+            uploader=track.artist,
+            duration_ms=track.durationMs,
+            score=100.0,
+            source="soundcloud",
+        )
+
+        calls = {"n": 0}
+
+        def flaky(tr, source, min_score=resolver.MIN_SCORE):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise OSError("network hiccup")
+            return [good]
+
+        monkeypatch.setattr(resolver, "_search_source", flaky)
+        result = resolver._search_source_retrying(track, "soundcloud")
+        assert result == [good]
+        assert calls["n"] == 2  # یک شکست + یک موفقیت
+
+    def test_persistent_error_returns_empty(self, track, monkeypatch):
+        from app import resolver
+
+        def always_fail(tr, source, min_score=resolver.MIN_SCORE):
+            raise OSError("down for good")
+
+        monkeypatch.setattr(resolver, "_search_source", always_fail)
+        # نباید استثنا بالا بیاید؛ منبعِ بعدی باید فرصت داشته باشد
+        assert resolver._search_source_retrying(track, "soundcloud") == []
+
+    def test_soundcloud_is_tried_first(self, track, monkeypatch):
+        from app import resolver
+        from app.resolver import Candidate
+
+        order: list[str] = []
+
+        def by_source(tr, source, min_score=resolver.MIN_SCORE):
+            order.append(source)
+            if source == "soundcloud":
+                return [
+                    Candidate(
+                        url="https://soundcloud.com/x/y",
+                        title=tr.title,
+                        uploader=tr.artist,
+                        duration_ms=tr.durationMs,
+                        score=resolver.GOOD_ENOUGH + 1,
+                        source="soundcloud",
+                    )
+                ]
+            return []
+
+        monkeypatch.setattr(resolver, "_search_source", by_source)
+        found = resolver._search_all_sources(track)
+        # ساندکلاد جوابِ قانع‌کننده داد — یوتیوب نباید اصلاً پرسیده شود
+        assert order == ["soundcloud"]
+        assert found and found[0].source == "soundcloud"
+
+    def test_falls_back_to_youtube_when_soundcloud_empty(self, track, monkeypatch):
+        from app import resolver
+        from app.resolver import Candidate
+
+        order: list[str] = []
+
+        def by_source(tr, source, min_score=resolver.MIN_SCORE):
+            order.append(source)
+            if source == "youtube":
+                return [
+                    Candidate(
+                        url="https://youtube.com/watch?v=z",
+                        title=tr.title,
+                        uploader=tr.artist,
+                        duration_ms=tr.durationMs,
+                        score=resolver.GOOD_ENOUGH + 1,
+                        source="youtube",
+                    )
+                ]
+            return []
+
+        monkeypatch.setattr(resolver, "_search_source", by_source)
+        found = resolver._search_all_sources(track)
+        # ساندکلاد خالی بود — نوبت به یوتیوب رسید
+        assert order == ["soundcloud", "youtube"]
+        assert found and found[0].source == "youtube"
+
+    def test_falls_back_to_youtube_when_soundcloud_errors(self, track, monkeypatch):
+        from app import resolver
+        from app.resolver import Candidate
+
+        def by_source(tr, source, min_score=resolver.MIN_SCORE):
+            if source == "soundcloud":
+                raise OSError("soundcloud down")
+            return [
+                Candidate(
+                    url="https://youtube.com/watch?v=z",
+                    title=tr.title,
+                    uploader=tr.artist,
+                    duration_ms=tr.durationMs,
+                    score=resolver.GOOD_ENOUGH + 1,
+                    source="youtube",
+                )
+            ]
+
+        monkeypatch.setattr(resolver, "_search_source", by_source)
+        # شکستِ دائمیِ ساندکلاد نباید کلِ دانلود را ببندد — یوتیوب جواب می‌دهد
+        found = resolver._search_all_sources(track)
+        assert found and found[0].source == "youtube"

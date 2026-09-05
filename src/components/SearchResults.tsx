@@ -1,12 +1,17 @@
 import { useState } from 'react'
 import { digits } from '../lib/format'
 import { useI18n } from '../lib/i18n'
-import type { Album, Artist, Playlist, SearchResults as Results, Track } from '../lib/types'
+import type { Album, Artist, Playlist, SearchResults as Results, Source, Track } from '../lib/types'
+import AnimatedList from './AnimatedList'
 import Artwork from './Artwork'
+import EmptyState from './EmptyState'
+import { useIntranet } from '../store/net'
+import SpotlightCard from './SpotlightCard'
 import SourceBadge from './SourceBadge'
 import TrackRow from './TrackRow'
-import { AlbumCard, ArtistCard } from './cards'
-import { ChevronIcon } from './icons'
+import { AlbumCard, ArtistCard, PlaylistRow } from './cards'
+import { ChevronIcon, PauseIcon, PlayIcon, SearchIcon } from './icons'
+import { SOURCE_COLOR } from './logos'
 
 interface Props {
   results: Results
@@ -14,68 +19,208 @@ interface Props {
   onTogglePlay: (track: Track) => void
   onOpenAlbum: (album: Album) => void
   onOpenArtist: (artist: Artist) => void
+  onOpenPlaylist: (playlist: Playlist) => void
 }
 
 type TabId = 'all' | 'songs' | 'artists' | 'albums' | 'playlists'
 
+/** تعداد کارت‌هایی که در ردیفِ افقیِ تب «همه» نشان داده می‌شود */
+const RAIL_COUNT = 8
+/** تعداد آهنگ‌های کنارِ برترین نتیجه — دقیقاً مثل اسپاتیفای */
+const TOP_SONGS_COUNT = 4
 const PREVIEW_COUNT = 5
 
-function Section({
+type TopResultItem =
+  | { kind: 'artist'; data: Artist }
+  | { kind: 'track'; data: Track }
+  | { kind: 'album'; data: Album }
+  | { kind: 'playlist'; data: Playlist }
+
+/**
+ * ترتیبِ اولویتِ پلتفرم برای «برترین نتیجه» — ساندکلاد اول، اسپاتیفای دوم،
+ * بقیه هرچه باشد بعد از این دوتا (بدون ترجیح خاصی بین‌شان).
+ */
+const TOP_RESULT_SOURCE_PRIORITY: Source[] = ['soundcloud', 'spotify']
+
+/** در یک پلتفرمِ مشخص (یا همه‌ی پلتفرم‌ها اگر source داده نشود)، نوع با بالاترین اولویت را برمی‌گرداند */
+function bestOfSource(results: Results, source?: Source): TopResultItem | null {
+  const only = <T extends { source: Source }>(arr: T[]) =>
+    source ? arr.filter((x) => x.source === source) : arr
+
+  const artists = only(results.artists)
+  if (artists[0]) return { kind: 'artist', data: artists[0] }
+  const tracks = only(results.tracks)
+  if (tracks[0]) return { kind: 'track', data: tracks[0] }
+  const albums = only(results.albums)
+  if (albums[0]) return { kind: 'album', data: albums[0] }
+  const playlists = only(results.playlists)
+  if (playlists[0]) return { kind: 'playlist', data: playlists[0] }
+  return null
+}
+
+function pickTopResult(results: Results): TopResultItem | null {
+  for (const source of TOP_RESULT_SOURCE_PRIORITY) {
+    const item = bestOfSource(results, source)
+    if (item) return item
+  }
+  return bestOfSource(results)
+}
+
+function SectionHeader({
   title,
   count,
-  expanded,
-  onToggle,
-  children,
+  onShowAll,
 }: {
   title: string
   count: number
-  expanded: boolean
-  onToggle: () => void
-  children: React.ReactNode
+  onShowAll?: () => void
 }) {
   const { t } = useI18n()
   return (
-    <section className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wide text-muted-2">{title}</h2>
-        {count > PREVIEW_COUNT && (
-          <button
-            onClick={onToggle}
-            className="inline-flex items-center gap-1 text-xs text-accent transition hover:brightness-125"
-          >
-            {expanded ? t.collapse : t.showAll(count)}
-            <ChevronIcon className={`size-3.5 transition ${expanded ? 'rotate-90' : ''}`} />
-          </button>
-        )}
-      </div>
-      {children}
-    </section>
+    <div className="flex items-center justify-between">
+      <h2 className="text-[11px] font-semibold uppercase tracking-wide text-muted-2">{title}</h2>
+      {onShowAll && (
+        <button
+          onClick={onShowAll}
+          className="inline-flex items-center gap-1 text-xs text-accent transition hover:brightness-125"
+        >
+          {t.showAll(count)}
+          <ChevronIcon className="size-3.5" />
+        </button>
+      )}
+    </div>
   )
 }
 
-function PlaylistRow({ playlist }: { playlist: Playlist }) {
+function TopResultCard({
+  item,
+  playingId,
+  onTogglePlay,
+  onOpenAlbum,
+  onOpenArtist,
+  onOpenPlaylist,
+}: {
+  item: TopResultItem
+  playingId: string | null
+  onTogglePlay: (track: Track) => void
+  onOpenAlbum: (album: Album) => void
+  onOpenArtist: (artist: Artist) => void
+  onOpenPlaylist: (playlist: Playlist) => void
+}) {
   const { t } = useI18n()
-  return (
-    <a
-      href={playlist.sourceUrl}
-      target="_blank"
-      rel="noreferrer"
-      className="flex items-center gap-3 rounded-lg px-2 py-2 transition hover:bg-panel-2"
-    >
-      <Artwork
-        src={playlist.artworkUrl}
-        alt={playlist.title}
-        seed={playlist.id}
-        className="size-10 shrink-0"
+
+  const meta = (() => {
+    switch (item.kind) {
+      case 'artist':
+        return {
+          title: item.data.name,
+          subtitle: null as string | null,
+          type: t.typeArtist,
+          source: item.data.source,
+          artworkUrl: item.data.artworkUrl,
+          seed: item.data.id,
+          rounded: 'rounded-full' as const,
+        }
+      case 'track':
+        return {
+          title: item.data.title,
+          subtitle: item.data.artist,
+          type: t.typeSong,
+          source: item.data.source,
+          artworkUrl: item.data.artworkUrl,
+          seed: item.data.albumId ?? item.data.id,
+          rounded: 'rounded-xl' as const,
+        }
+      case 'album':
+        return {
+          title: item.data.title,
+          subtitle: item.data.artist,
+          type: t.typeAlbum,
+          source: item.data.source,
+          artworkUrl: item.data.artworkUrl,
+          seed: item.data.id,
+          rounded: 'rounded-xl' as const,
+        }
+      case 'playlist':
+        return {
+          title: item.data.title,
+          subtitle: item.data.owner,
+          type: t.typePlaylist,
+          source: item.data.source,
+          artworkUrl: item.data.artworkUrl,
+          seed: item.data.id,
+          rounded: 'rounded-xl' as const,
+        }
+    }
+  })()
+
+  const playing = item.kind === 'track' && playingId === item.data.id
+
+  // متن همیشه به کف کارت می‌چسبد (mt-auto) — این‌طور وقتی کارت به قد ستونِ
+  // «آهنگ‌ها» کش می‌آید، فضای اضافه بالای آرت‌ورک می‌رود، نه زیر متن؛ وگرنه
+  // یک باکس تاریک نیمه‌خالی زیر عنوان می‌ماند
+  const body = (
+    <>
+      <span
+        aria-hidden
+        className="src-glow pointer-events-none absolute -inset-4 -z-10 rounded-2xl blur-2xl"
+        style={{ '--src': SOURCE_COLOR[meta.source] } as React.CSSProperties}
       />
-      <div className="min-w-0 flex-1">
-        <p className="bidi truncate text-sm">{playlist.title}</p>
-        <p className="truncate text-xs text-muted">
-          {t.trackCount(playlist.trackCount)} · <bdi>{playlist.owner}</bdi>
+      <Artwork
+        src={meta.artworkUrl}
+        alt={meta.title}
+        seed={meta.seed}
+        rounded={meta.rounded}
+        className="size-24 shadow-lg shadow-black/30"
+      />
+      <div className="mt-auto min-w-0 pt-4">
+        <p className="bidi truncate text-xl font-bold">{meta.title}</p>
+        {meta.subtitle && (
+          <p className="bidi truncate text-sm text-muted">
+            <bdi>{meta.subtitle}</bdi>
+          </p>
+        )}
+        <p className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-muted">
+          {meta.type}
+          <SourceBadge source={meta.source} />
         </p>
       </div>
-      <SourceBadge source={playlist.source} />
-    </a>
+    </>
+  )
+
+  if (item.kind === 'track') {
+    const track = item.data
+    return (
+      <SpotlightCard className="group flex min-h-52 flex-1 flex-col overflow-hidden rounded-2xl bg-panel-2 p-5">
+        {body}
+        <button
+          onClick={() => onTogglePlay(track)}
+          aria-label={playing ? t.stopPreview : t.playTrack(track.title)}
+          className={`absolute bottom-5 end-5 grid size-11 place-items-center rounded-full bg-accent text-accent-fg shadow-lg shadow-black/40 transition ${
+            playing ? '' : 'hover-reveal opacity-0 translate-y-1 group-hover:translate-y-0 group-hover:opacity-100'
+          }`}
+        >
+          {playing ? <PauseIcon className="size-5" /> : <PlayIcon className="size-5" />}
+        </button>
+      </SpotlightCard>
+    )
+  }
+
+  const onClick =
+    item.kind === 'artist'
+      ? () => onOpenArtist(item.data)
+      : item.kind === 'album'
+        ? () => onOpenAlbum(item.data)
+        : () => onOpenPlaylist(item.data)
+
+  return (
+    <SpotlightCard
+      as="button"
+      onClick={onClick}
+      className="group flex min-h-52 w-full flex-1 flex-col overflow-hidden rounded-2xl bg-panel-2 p-5 text-start transition hover:bg-panel-2/70"
+    >
+      {body}
+    </SpotlightCard>
   )
 }
 
@@ -85,13 +230,14 @@ export default function SearchResults({
   onTogglePlay,
   onOpenAlbum,
   onOpenArtist,
+  onOpenPlaylist,
 }: Props) {
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [tab, setTab] = useState<TabId>('all')
   const { t, lang } = useI18n()
-
-  const toggle = (k: string) => setExpanded((e) => ({ ...e, [k]: !e[k] }))
-  const cut = <T,>(arr: T[], key: string) => (expanded[key] ? arr : arr.slice(0, PREVIEW_COUNT))
+  // در حالتِ اینترانت این نتایج از کشِ سرور آمده‌اند، نه از کاتالوگ‌ها. نگفتنش
+  // یعنی کاربر فکر می‌کند کاتالوگ فقیر شده — و دنبال آهنگی می‌گردد که فقط
+  // «هنوز از اینجا رد نشده».
+  const intranet = useIntranet()
 
   const counts = {
     songs: results.tracks.length,
@@ -103,9 +249,10 @@ export default function SearchResults({
 
   if (total === 0) {
     return (
-      <div className="rise rounded-2xl border border-line-soft bg-panel/50 p-10 text-center">
-        <p className="text-sm text-muted">{t.noResults(results.query)}</p>
-      </div>
+      <EmptyState
+        icon={<SearchIcon className="size-5" />}
+        text={intranet ? t.intranetNoResults : t.noResults(results.query)}
+      />
     )
   }
 
@@ -119,7 +266,8 @@ export default function SearchResults({
     ] satisfies { id: TabId; label: string; count: number }[]
   ).filter((x) => x.count > 0)
 
-  const shows = (id: TabId) => tab === 'all' || tab === id
+  const isAll = tab === 'all'
+  const topResult = isAll ? pickTopResult(results) : null
 
   return (
     <div className="rise overflow-hidden rounded-2xl border border-line-soft bg-panel/50">
@@ -130,6 +278,13 @@ export default function SearchResults({
         </p>
         <span className="shrink-0 text-[11px] text-muted-2">{t.foundSoFar(total)}</span>
       </div>
+
+      {intranet && (
+        <p className="border-b border-line-soft bg-panel-2/60 px-4 py-2 text-[11px] leading-relaxed text-muted-2">
+          <span className="font-semibold text-muted">{t.intranetResults}</span>{' '}
+          {t.intranetResultsHint}
+        </p>
+      )}
 
       <div className="flex flex-wrap gap-1.5 border-b border-line-soft px-4 py-2.5">
         {tabs.map((x) => (
@@ -151,15 +306,55 @@ export default function SearchResults({
       </div>
 
       <div className="space-y-8 p-4">
-        {shows('songs') && counts.songs > 0 && (
-          <Section
-            title={t.songs}
-            count={counts.songs}
-            expanded={!!expanded.tracks || tab === 'songs'}
-            onToggle={() => toggle('tracks')}
-          >
-            <div className="space-y-0.5">
-              {(tab === 'songs' ? results.tracks : cut(results.tracks, 'tracks')).map((x) => (
+        {isAll && (topResult || counts.songs > 0) && (
+          <section className="grid gap-4 md:grid-cols-2">
+            {topResult && (
+              <div className="flex flex-col gap-3">
+                <SectionHeader title={t.topResult} count={0} />
+                <TopResultCard
+                  item={topResult}
+                  playingId={playingId}
+                  onTogglePlay={onTogglePlay}
+                  onOpenAlbum={onOpenAlbum}
+                  onOpenArtist={onOpenArtist}
+                  onOpenPlaylist={onOpenPlaylist}
+                />
+              </div>
+            )}
+
+            {counts.songs > 0 && (
+              <div className="flex flex-col gap-3">
+                <SectionHeader title={t.songs} count={0} />
+                <AnimatedList className="space-y-0.5">
+                  {results.tracks.slice(0, TOP_SONGS_COUNT).map((x) => (
+                    <TrackRow
+                      key={x.id}
+                      track={x}
+                      playingId={playingId}
+                      onTogglePlay={onTogglePlay}
+                      showSource
+                    />
+                  ))}
+                </AnimatedList>
+                {counts.songs > TOP_SONGS_COUNT && (
+                  <button
+                    onClick={() => setTab('songs')}
+                    className="inline-flex items-center gap-1 text-xs text-accent transition hover:brightness-125"
+                  >
+                    {t.showAll(counts.songs)}
+                    <ChevronIcon className="size-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
+          </section>
+        )}
+
+        {tab === 'songs' && counts.songs > 0 && (
+          <section className="space-y-3">
+            <SectionHeader title={t.songs} count={counts.songs} />
+            <AnimatedList className="space-y-0.5">
+              {results.tracks.map((x) => (
                 <TrackRow
                   key={x.id}
                   track={x}
@@ -168,55 +363,75 @@ export default function SearchResults({
                   showSource
                 />
               ))}
-            </div>
-          </Section>
+            </AnimatedList>
+          </section>
         )}
 
-        {shows('artists') && counts.artists > 0 && (
-          <Section
-            title={t.artists}
-            count={counts.artists}
-            expanded={!!expanded.artists || tab === 'artists'}
-            onToggle={() => toggle('artists')}
-          >
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
-              {(tab === 'artists' ? results.artists : cut(results.artists, 'artists')).map((x) => (
-                <ArtistCard key={x.id} artist={x} onOpen={() => onOpenArtist(x)} />
-              ))}
-            </div>
-          </Section>
+        {(isAll || tab === 'artists') && counts.artists > 0 && (
+          <section className="space-y-3">
+            <SectionHeader
+              title={t.artists}
+              count={counts.artists}
+              onShowAll={isAll && counts.artists > PREVIEW_COUNT ? () => setTab('artists') : undefined}
+            />
+            {isAll ? (
+              <div className="no-scrollbar -mx-1 flex gap-1 overflow-x-auto px-1">
+                {results.artists.slice(0, RAIL_COUNT).map((x) => (
+                  <div key={x.id} className="w-28 shrink-0 sm:w-32">
+                    <ArtistCard artist={x} onOpen={() => onOpenArtist(x)} />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
+                {results.artists.map((x) => (
+                  <ArtistCard key={x.id} artist={x} onOpen={() => onOpenArtist(x)} />
+                ))}
+              </div>
+            )}
+          </section>
         )}
 
-        {shows('albums') && counts.albums > 0 && (
-          <Section
-            title={t.albums}
-            count={counts.albums}
-            expanded={!!expanded.albums || tab === 'albums'}
-            onToggle={() => toggle('albums')}
-          >
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-              {(tab === 'albums' ? results.albums : cut(results.albums, 'albums')).map((x) => (
-                <AlbumCard key={x.id} album={x} onOpen={() => onOpenAlbum(x)} />
-              ))}
-            </div>
-          </Section>
+        {(isAll || tab === 'albums') && counts.albums > 0 && (
+          <section className="space-y-3">
+            <SectionHeader
+              title={t.albums}
+              count={counts.albums}
+              onShowAll={isAll && counts.albums > PREVIEW_COUNT ? () => setTab('albums') : undefined}
+            />
+            {isAll ? (
+              <div className="no-scrollbar -mx-1 flex gap-1 overflow-x-auto px-1">
+                {results.albums.slice(0, RAIL_COUNT).map((x) => (
+                  <div key={x.id} className="w-32 shrink-0 sm:w-36">
+                    <AlbumCard album={x} onOpen={() => onOpenAlbum(x)} />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+                {results.albums.map((x) => (
+                  <AlbumCard key={x.id} album={x} onOpen={() => onOpenAlbum(x)} />
+                ))}
+              </div>
+            )}
+          </section>
         )}
 
-        {shows('playlists') && counts.playlists > 0 && (
-          <Section
-            title={t.playlists}
-            count={counts.playlists}
-            expanded={!!expanded.playlists || tab === 'playlists'}
-            onToggle={() => toggle('playlists')}
-          >
+        {(isAll || tab === 'playlists') && counts.playlists > 0 && (
+          <section className="space-y-3">
+            <SectionHeader
+              title={t.playlists}
+              count={counts.playlists}
+              onShowAll={
+                isAll && counts.playlists > PREVIEW_COUNT ? () => setTab('playlists') : undefined
+              }
+            />
             <div className="space-y-0.5">
-              {(tab === 'playlists' ? results.playlists : cut(results.playlists, 'playlists')).map(
-                (x) => (
-                  <PlaylistRow key={x.id} playlist={x} />
-                ),
-              )}
+              {(isAll ? results.playlists.slice(0, PREVIEW_COUNT) : results.playlists).map((x) => (
+                <PlaylistRow key={x.id} playlist={x} onOpen={() => onOpenPlaylist(x)} />
+              ))}
             </div>
-          </Section>
+          </section>
         )}
       </div>
     </div>

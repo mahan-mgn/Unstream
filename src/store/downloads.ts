@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { api } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import type { DownloadProgress, JobStatus, Quality, Track } from '../lib/types'
+import { useNet } from './net'
 import { useToasts } from './toasts'
 
 export interface Job {
@@ -13,11 +14,17 @@ export interface Job {
   percent: number
   error?: string
   fileUrl?: string
+  /** همان فایل برای پخش در مرورگر */
+  streamUrl?: string
   format?: string
   /** فایل سالم است ولی AcoustID ترک دیگری را شناخته */
   warning?: string
   /** فایل .lrc اگر متن هم‌زمان‌شده پیدا شده باشد */
   lyricsUrl?: string
+  /** هم‌ترازیِ بلندی که سرور اندازه گرفته (دسی‌بل) */
+  gainDb?: number
+  /** نسخه‌ای که کاربر دستی انتخاب کرده — resolver دور زده می‌شود */
+  candidateUrl?: string
   createdAt: number
   /** زمان شروع دانلود واقعی */
   startedAt?: number
@@ -40,7 +47,30 @@ export interface Batch {
 export const isActive = (s: JobStatus) =>
   s === 'queued' || s === 'searching' || s === 'downloading' || s === 'tagging'
 
+/**
+ * کاری که هست ولی جلو نمی‌رود — منتظرِ برگشتنِ اینترنتِ بین‌الملل.
+ *
+ * عمداً «فعال» حساب نمی‌شود: نه اسپینر می‌خواهد (چیزی در جریان نیست) و نه در
+ * تخمینِ زمان می‌آید (زمانش نامعلوم است و واردکردنش هر ETAی را بی‌معنی
+ * می‌کرد). ولی «تمام‌شده» هم نیست، و همین تفاوت است که `finished` را درست
+ * نگه می‌دارد.
+ */
+export const isWaiting = (s: JobStatus) => s === 'deferred'
+
 export const isDone = (s: JobStatus) => s === 'ready'
+
+/**
+ * پیامِ «رفت تو صف».
+ *
+ * در حالتِ اینترانت همان صف معنیِ دیگری دارد و باید صریح گفته شود: دانلود
+ * *شروع نمی‌شود* تا اینترنتِ بین‌الملل برگردد. بدون این، کاربر چند دقیقه به
+ * نواری نگاه می‌کند که تکان نمی‌خورد و نتیجه می‌گیرد برنامه گیر کرده.
+ */
+function queuedToast(title: string): void {
+  const { t } = useI18n.getState()
+  const intranet = useNet.getState().layer === 'internet'
+  useToasts.getState().push(intranet ? t.intranetDownload : t.toastQueued(title), 'info')
+}
 
 /** کنسل‌کننده‌ی هر کار، بیرون از state نگه داشته می‌شود */
 const cancelers = new Map<string, () => void>()
@@ -53,6 +83,8 @@ export interface BatchView {
   total: number
   done: number
   active: number
+  /** کارهایی که منتظرِ برگشتنِ اینترنت‌اند */
+  waiting: number
   failed: number
   /** ۰ تا ۱۰۰ روی کل بچ */
   percent: number
@@ -67,6 +99,8 @@ interface DownloadState {
   collapsed: boolean
   enqueue: (track: Track, quality: Quality, batch?: Partial<Batch>) => void
   enqueueMany: (tracks: Track[], quality: Quality, batch: Partial<Batch>) => void
+  /** دانلود دوباره‌ی یک ترک از نسخه‌ای که کاربر خودش انتخاب کرده */
+  pickSource: (track: Track, quality: Quality, candidateUrl: string) => void
   cancel: (jobId: string) => void
   retry: (jobId: string) => void
   remove: (jobId: string) => void
@@ -77,7 +111,8 @@ interface DownloadState {
 
 export const useDownloads = create<DownloadState>((set, get) => {
   function start(job: Job) {
-    const stop = api.download({ track: job.track, quality: job.quality }, (p: DownloadProgress) => {
+    const req = { track: job.track, quality: job.quality, candidateUrl: job.candidateUrl }
+    const stop = api.download(req, (p: DownloadProgress) => {
       set({
         jobs: get().jobs.map((j) =>
           j.id === job.id
@@ -87,9 +122,11 @@ export const useDownloads = create<DownloadState>((set, get) => {
                 percent: p.percent,
                 error: p.error,
                 fileUrl: p.fileUrl,
+                streamUrl: p.streamUrl,
                 format: p.format ?? j.format,
                 warning: p.warning ?? j.warning,
                 lyricsUrl: p.lyricsUrl ?? j.lyricsUrl,
+                gainDb: p.gainDb ?? j.gainDb,
                 startedAt:
                   p.status === 'downloading' && !j.startedAt ? Date.now() : j.startedAt,
                 finishedAt: p.status === 'ready' ? Date.now() : j.finishedAt,
@@ -100,7 +137,19 @@ export const useDownloads = create<DownloadState>((set, get) => {
       const { t } = useI18n.getState()
       if (p.status === 'ready') {
         cancelers.delete(job.id)
-        useToasts.getState().push(t.toastReady(job.track.title), 'success')
+        /*
+         * «آماده شد» تا امروز فقط خبر بود و بن‌بست: فایل روی دیسک نشسته بود
+         * و کاربر باید خودش راهش را به کتابخانه پیدا می‌کرد. حالا همان توست
+         * مقصدش را هم دارد.
+         *
+         * ناوبری از طریق رویداد است نه ایمپورت: این استور نه از ری‌اکت خبر
+         * دارد نه باید داشته باشد، و `App` تنها جایی است که می‌داند «رفتن به
+         * کتابخانه» یعنی چه.
+         */
+        useToasts.getState().push(t.toastReady(job.track.title), 'success', {
+          label: t.goToLibrary,
+          run: () => window.dispatchEvent(new CustomEvent('unstream:open-library')),
+        })
       } else if (p.status === 'error') {
         cancelers.delete(job.id)
         useToasts.getState().push(t.toastFailed(job.track.title), 'error')
@@ -119,8 +168,18 @@ export const useDownloads = create<DownloadState>((set, get) => {
     }
   }
 
-  function add(track: Track, quality: Quality, batch: Batch, quiet = false): boolean {
-    const existing = get().jobs.find((j) => j.track.id === track.id && isActive(j.status))
+  function add(
+    track: Track,
+    quality: Quality,
+    batch: Batch,
+    quiet = false,
+    candidateUrl?: string,
+  ): boolean {
+    // کیفیت هم بخشی از هویت کار است — سرور هم با همین جفت (ترک، کیفیت) کش می‌کند.
+    // بدون آن، گرفتنِ همان ترک با کیفیت دیگر «قبلاً در صف است» می‌گرفت.
+    const existing = get().jobs.find(
+      (j) => j.track.id === track.id && j.quality === quality && isActive(j.status),
+    )
     if (existing) {
       if (!quiet) {
         useToasts.getState().push(useI18n.getState().t.toastAlready(track.title), 'info')
@@ -134,6 +193,7 @@ export const useDownloads = create<DownloadState>((set, get) => {
       quality,
       status: 'queued',
       percent: 0,
+      candidateUrl,
       createdAt: Date.now(),
     }
     set({ jobs: [...get().jobs, job] })
@@ -154,7 +214,7 @@ export const useDownloads = create<DownloadState>((set, get) => {
       )
       if (!add(track, quality, batch)) return
       set({ batches: [batch, ...get().batches], collapsed: false })
-      useToasts.getState().push(useI18n.getState().t.toastQueued(track.title), 'info')
+      queuedToast(track.title)
     },
 
     enqueueMany: (tracks, quality, seed) => {
@@ -163,7 +223,16 @@ export const useDownloads = create<DownloadState>((set, get) => {
       const added = tracks.filter((t) => add(t, quality, batch, true)).length
       if (!added) return
       set({ batches: [batch, ...get().batches], collapsed: false })
-      useToasts.getState().push(useI18n.getState().t.toastQueued(batch.title), 'info')
+      queuedToast(batch.title)
+    },
+
+    pickSource: (track, quality, candidateUrl) => {
+      const batch = makeBatch({ artworkUrl: track.artworkUrl }, quality, track.title)
+      // quiet نیست: اگر همین ترک همین الان در جریان باشد، کاربر باید بفهمد
+      // چرا انتخابش اثر نکرد
+      if (!add(track, quality, batch, false, candidateUrl)) return
+      set({ batches: [batch, ...get().batches], collapsed: false })
+      queuedToast(track.title)
     },
 
     cancel: (jobId) => {
@@ -179,7 +248,22 @@ export const useDownloads = create<DownloadState>((set, get) => {
     retry: (jobId) => {
       const job = get().jobs.find((j) => j.id === jobId)
       if (!job) return
-      const fresh: Job = { ...job, status: 'queued', percent: 0, error: undefined, startedAt: undefined }
+      // اگر اتصال قبلی هنوز باز است باید بسته شود؛ وگرنه start جایگزینش می‌کرد و
+      // آن EventSource تا آخر عمر صفحه بی‌صاحب باز می‌ماند
+      cancelers.get(jobId)?.()
+      cancelers.delete(jobId)
+      const fresh: Job = {
+        ...job,
+        status: 'queued',
+        percent: 0,
+        error: undefined,
+        warning: undefined,
+        fileUrl: undefined,
+        streamUrl: undefined,
+        lyricsUrl: undefined,
+        startedAt: undefined,
+        finishedAt: undefined,
+      }
       set({ jobs: get().jobs.map((j) => (j.id === jobId ? fresh : j)) })
       start(fresh)
     },
@@ -213,9 +297,44 @@ export const useDownloads = create<DownloadState>((set, get) => {
   }
 })
 
+/**
+ * کارِ مربوط به یک (ترک، کیفیت) — همان جفتی که در بقیه‌ی این استور و در سرور
+ * هویتِ یک دانلود است.
+ *
+ * قبلاً فقط با `trackId` می‌گشت و *اولین* کار را برمی‌داشت. یعنی اگر ترکی
+ * یک‌بار با ۳۲۰ گرفته شده بود و کاربر حالا همان را با ۱۲۸ می‌گرفت، ردیف
+ * همچنان کارِ کهنه‌ی «آماده» را نشان می‌داد: نه نوار پیشرفتی، نه امکانِ لغو —
+ * دکمه انگار هیچ کاری نکرده بود.
+ *
+ * بینِ چند کارِ هم‌کلید، کارِ در جریان مقدم است (همان چیزی که کاربر همین حالا
+ * منتظرش است) و بعد تازه‌ترین.
+ */
+export function selectTrackJob(
+  jobs: Job[],
+  trackId: string,
+  quality: Quality,
+): Job | undefined {
+  let best: Job | undefined
+  for (const job of jobs) {
+    if (job.track.id !== trackId || job.quality !== quality) continue
+    if (!best) {
+      best = job
+      continue
+    }
+    const bestActive = isActive(best.status)
+    const jobActive = isActive(job.status)
+    if (jobActive !== bestActive) {
+      if (jobActive) best = job
+      continue
+    }
+    if (job.createdAt >= best.createdAt) best = job
+  }
+  return best
+}
+
 /** وضعیت دانلود یک ترک مشخص (برای رندر ردیف‌ها) */
-export function useTrackJob(trackId: string): Job | undefined {
-  return useDownloads((s) => s.jobs.find((j) => j.track.id === trackId))
+export function useTrackJob(trackId: string, quality: Quality): Job | undefined {
+  return useDownloads((s) => selectTrackJob(s.jobs, trackId, quality))
 }
 
 /** بک‌اند چند ترک را همزمان می‌برد؛ ETA بدون این ضریب چند برابر بیش‌برآورد می‌شود */
@@ -247,25 +366,37 @@ export function useBatchViews(): BatchView[] {
   const jobs = useDownloads((s) => s.jobs)
   const batches = useDownloads((s) => s.batches)
 
-  return batches.map((batch) => {
-    const own = jobs.filter((j) => j.batchId === batch.id)
-    const done = own.filter((j) => isDone(j.status)).length
-    const active = own.filter((j) => isActive(j.status)).length
-    const failed = own.filter((j) => j.status === 'error').length
-    const percent = own.length
-      ? own.reduce((sum, j) => sum + (isDone(j.status) ? 100 : j.percent), 0) / own.length
-      : 0
+  /*
+   * بچی که دیگر هیچ کاری ندارد اصلاً نباید کارتی داشته باشد. `finished` روی
+   * چنین بچی false می‌ماند (چون `own.length > 0` شرطِ آن است) و دکمه‌ی بستن
+   * هم با همان شرط رندر می‌شود — یعنی کارتِ «۰ از ۰» تا رفرشِ صفحه روی پنل
+   * می‌ماند بی‌آنکه راهی برای بستنش باشد.
+   */
+  return batches
+    .filter((batch) => jobs.some((j) => j.batchId === batch.id))
+    .map((batch) => {
+      const own = jobs.filter((j) => j.batchId === batch.id)
+      const done = own.filter((j) => isDone(j.status)).length
+      const active = own.filter((j) => isActive(j.status)).length
+      const waiting = own.filter((j) => isWaiting(j.status)).length
+      const failed = own.filter((j) => j.status === 'error').length
+      const percent = own.length
+        ? own.reduce((sum, j) => sum + (isDone(j.status) ? 100 : j.percent), 0) / own.length
+        : 0
 
-    return {
-      batch,
-      jobs: own,
-      total: own.length,
-      done,
-      active,
-      failed,
-      percent,
-      etaSeconds: active ? estimateEta(own) : null,
-      finished: own.length > 0 && active === 0,
-    }
-  })
+      return {
+        batch,
+        jobs: own,
+        total: own.length,
+        done,
+        active,
+        waiting,
+        failed,
+        percent,
+        etaSeconds: active ? estimateEta(own) : null,
+        // بچی که فقط کارِ معوق دارد تمام نشده — بدونِ شرطِ `waiting`، کارتش
+        // در حالتِ اینترانت فوراً «تمام شد» می‌گرفت درحالی‌که هیچ فایلی نیامده
+        finished: own.length > 0 && active === 0 && waiting === 0,
+      }
+    })
 }

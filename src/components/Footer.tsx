@@ -1,5 +1,7 @@
 import { useI18n } from '../lib/i18n'
 import { API_MODE } from '../lib/api'
+import { isNativeApp } from '../lib/server'
+import { TelegramConnection } from './TelegramLink'
 
 const AUTHORS = [
   { handle: 'amiralibgi', url: 'https://x.com/_amiralibgi' },
@@ -26,12 +28,36 @@ export default function Footer() {
   const { t } = useI18n()
 
   return (
-    <footer className="pb-8 text-center text-[11px] text-muted-2">
+    <footer className="px-safe pb-8 text-center text-[11px] text-muted-2">
       {API_MODE === 'mock' && (
         <p className="mb-3">
           <span className="rounded-full border border-line bg-panel px-2 py-1">{t.demoMode}</span>
         </p>
       )}
+      {/*
+       * راهِ برگشت به ویزاردِ راه‌اندازی. یک لینکِ معمولی با `href`، نه
+       * ناوبریِ داخلی: صفحه از نو بار می‌شود و `App` خودش دوباره از سرور
+       * می‌پرسد — همان مسیری که بارِ اول رفتیم، بدونِ هیچ stateِ تازه.
+       *
+       * در اپ نیتیو جایش نیست: آن‌جا سؤالِ «سرور کجاست» با `ServerSetup`
+       * پاسخ داده می‌شود و کلیدها روی آن سرور است نه این دستگاه.
+       */}
+      {API_MODE === 'http' && !isNativeApp() && (
+        <p className="mb-3">
+          <a
+            href="/?setup=1"
+            className="rounded-full border border-line bg-panel px-2.5 py-1 transition hover:border-accent/50 hover:text-fg"
+          >
+            {t.setupMenu}
+          </a>
+        </p>
+      )}
+      {/* اینجا، نه در تنظیماتِ صدا: «فایل‌ها به کدام چت می‌روند» چیزی است که
+          کاربر باید بدون گشتن ببیند و بتواند قطعش کند */}
+      <div className="mx-auto mb-3 w-fit max-w-sm">
+        <TelegramConnection />
+      </div>
+
       <p className="inline-flex flex-wrap items-center justify-center gap-1.5">
         <span>{t.builtBy}</span>
         {AUTHORS.map((author, i) => (

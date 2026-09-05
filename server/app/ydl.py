@@ -9,6 +9,7 @@ from .config import (
     JS_RUNTIME,
     POT_BASE_URL,
     POT_SERVER_HOME,
+    YTDLP_PROXY,
 )
 
 BASE_OPTS: dict = {
@@ -60,6 +61,10 @@ def opts(**extra) -> dict:
     merged = {**BASE_OPTS, **auth_opts()}
     if FFMPEG_LOCATION:
         merged["ffmpeg_location"] = FFMPEG_LOCATION
+    if YTDLP_PROXY:
+        # هم استخراج و هم خودِ دانلود فرگمنت‌ها از همین‌جا می‌روند —
+        # پروکسی کردن فقط استخراج، لینک‌های مستقیمِ غیرقابل‌دسترس می‌دهد
+        merged["proxy"] = YTDLP_PROXY
     merged.update(extra)
     return merged
 
@@ -74,3 +79,20 @@ def has_jsruntime() -> bool:
 
 def has_potoken() -> bool:
     return bool(POT_BASE_URL or POT_SERVER_HOME)
+
+
+def proxy_label() -> str | bool:
+    """
+    آدرس پروکسی بدون نام‌کاربری و رمز.
+
+    `/health` را کسی می‌بیند که لزوماً صاحب سرور نیست؛ رمزِ پروکسی نباید در
+    یک اندپوینت بی‌احراز هویت لو برود، ولی «هست یا نیست» باید دیده شود.
+    """
+    if not YTDLP_PROXY:
+        return False
+    scheme, sep, rest = YTDLP_PROXY.partition("://")
+    if not sep:
+        # بدون طرح — همان «host:port» خالی است و چیزی برای پنهان کردن ندارد
+        scheme, rest = "", YTDLP_PROXY
+    host = rest.rpartition("@")[2]
+    return f"{scheme}://{host}" if scheme else host

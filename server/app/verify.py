@@ -12,13 +12,12 @@ resolver فقط از روی عنوان و مدت‌زمان تصمیم می‌گ
 
 from __future__ import annotations
 
-import json
-import subprocess
 from pathlib import Path
 
 import httpx
 
-from .config import ACOUSTID_KEY, FPCALC
+from .config import ACOUSTID_KEY, FPCALC, PROXY
+from .identify import fingerprint as _fingerprint
 from .resolver import _overlap, _tokens
 
 LOOKUP_URL = "https://api.acoustid.org/v2/lookup"
@@ -32,21 +31,6 @@ MIN_CONFIDENCE = 0.5
 
 def available() -> bool:
     return bool(ACOUSTID_KEY and FPCALC)
-
-
-def _fingerprint(path: Path) -> tuple[int, str] | None:
-    try:
-        out = subprocess.run(
-            [str(FPCALC), "-json", str(path)],
-            capture_output=True,
-            text=True,
-            timeout=60,
-            check=True,
-        )
-        body = json.loads(out.stdout)
-        return int(body["duration"]), body["fingerprint"]
-    except Exception:
-        return None
 
 
 def check(path: Path, title: str, artist: str) -> str | None:
@@ -73,6 +57,7 @@ def check(path: Path, title: str, artist: str) -> str | None:
                 "meta": "recordings",
             },
             timeout=_TIMEOUT,
+            proxy=PROXY,
         )
         res.raise_for_status()
         results = res.json().get("results") or []

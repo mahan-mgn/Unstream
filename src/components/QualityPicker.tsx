@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
+import { usePopover } from '../lib/usePopover'
 import { digits } from '../lib/format'
 import { useI18n } from '../lib/i18n'
 import { CODEC_QUALITIES, MP3_QUALITIES, type Quality } from '../lib/types'
@@ -13,21 +14,7 @@ export default function QualityPicker() {
   const { quality, setQuality } = useSettings()
   const { t, lang } = useI18n()
   const [open, setOpen] = useState(false)
-  const box = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const onDown = (e: MouseEvent) => {
-      if (!box.current?.contains(e.target as Node)) setOpen(false)
-    }
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
-    document.addEventListener('mousedown', onDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open])
+  const box = usePopover<HTMLDivElement>(open, () => setOpen(false))
 
   const label =
     quality === 'original'
@@ -64,7 +51,7 @@ export default function QualityPicker() {
         aria-label={t.qualityMenu}
         className="flex items-center gap-1.5 rounded-full border border-line bg-panel py-1.5 pe-2 ps-3 text-xs text-muted transition hover:text-fg"
       >
-        <span className="text-muted-2">{t.quality}</span>
+        <span className="hidden text-muted-2 sm:inline">{t.quality}</span>
         <span className="font-semibold text-fg">{label}</span>
         <ChevronIcon className={`size-3 transition ${open ? '-rotate-90' : 'rotate-90'}`} flip={false} />
       </button>

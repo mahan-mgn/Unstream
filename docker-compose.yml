@@ -28,8 +28,15 @@ services:
       UNSTREAM_SPOTIFY_CLIENT_ID: ${UNSTREAM_SPOTIFY_CLIENT_ID:-}
       UNSTREAM_SPOTIFY_CLIENT_SECRET: ${UNSTREAM_SPOTIFY_CLIENT_SECRET:-}
       UNSTREAM_ACOUSTID_KEY: ${UNSTREAM_ACOUSTID_KEY:-}
+      UNSTREAM_ANTHROPIC_API_KEY: ${UNSTREAM_ANTHROPIC_API_KEY:-}
+      UNSTREAM_PROXY: ${UNSTREAM_PROXY:-}
+      UNSTREAM_YTDLP_PROXY: ${UNSTREAM_YTDLP_PROXY:-}
       UNSTREAM_CONCURRENCY: ${UNSTREAM_CONCURRENCY:-3}
       UNSTREAM_FILE_RETENTION: ${UNSTREAM_FILE_RETENTION:-604800}
+    # پروکسیِ روی هاست از داخل کانتینر با این نام دیده می‌شود. روی داکر دسکتاپ
+    # خودکار هست، روی داکرِ لینوکس نه — و آن‌جا UNSTREAM_PROXY بی‌صدا شکست می‌خورد.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - unstream-data:/data
       # پوشه سوار می‌شود، نه فایل: bind کردنِ فایلی که وجود ندارد،
@@ -43,6 +50,43 @@ services:
       - server
     ports:
       - "${UNSTREAM_PORT:-8080}:80"
+
+  # اختیاری — «docker compose --profile tunnel up -d» و بعد
+  # «docker compose logs tunnel» که آدرسِ https://…trycloudflare.com را چاپ می‌کند.
+  #
+  # چرا لازم است: روی HTTP ساده (یعنی http://<آی‌پی>:8080 در وای‌فای خانه)
+  # مرورگر اپ را «امن» حساب نمی‌کند و سه چیز کار نمی‌کنند — نصبِ PWA، پخشِ
+  # آفلاین (سرویس‌ورکر)، و شناساییِ آهنگ با میکروفون. تونل یک آدرسِ HTTPS
+  # می‌دهد و هر سه برمی‌گردند.
+  #
+  # هشدار: این آدرس عمومی است و هیچ رمزی ندارد — هرکس لینک را داشته باشد به
+  # همین دانلودر دسترسی دارد. فقط تا وقتی لازمش داری بالا نگهش دار.
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    depends_on:
+      - web
+    command: tunnel --no-autoupdate --url http://web:80
+
+  # اختیاری — فقط با «docker compose --profile bot up» بالا می‌آید، چون به
+  # توکن نیاز دارد و بدون آن run.py همان اول بی‌صدا خارج می‌شود.
+  bot:
+    build: ./server
+    restart: unless-stopped
+    profiles: ["bot"]
+    depends_on:
+      - server
+    command: python -m app.bot.run
+    environment:
+      UNSTREAM_TELEGRAM_BOT_TOKEN: ${UNSTREAM_TELEGRAM_BOT_TOKEN:-}
+      UNSTREAM_API_BASE_URL: http://server:8000
+      UNSTREAM_FOLLOW_POLL_INTERVAL: ${UNSTREAM_FOLLOW_POLL_INTERVAL:-1800}
+      UNSTREAM_TELEGRAM_CACHE_CHAT_ID: ${UNSTREAM_TELEGRAM_CACHE_CHAT_ID:-}
+    volumes:
+      # فقط برای دیتابیسِ محلیِ بات (follow ها) — کتابخانه و دانلودها همچنان
+      # فقط سمتِ سرورند؛ همین یک والیوم مشترک است ولی فایل‌ها جدا می‌مانند
+      - unstream-data:/data
 
 volumes:
   unstream-data:

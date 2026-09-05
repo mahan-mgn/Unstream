@@ -165,13 +165,21 @@ export function albumDetail(album: Album): AlbumDetail {
   }
 }
 
+/**
+ * هنرمندها — به‌ازای هر پلتفرم یک ردیف.
+ *
+ * «فرهاد مهراد» عمداً از هر چهار کاتالوگ آمده: سرور هم همین کار را می‌کند و
+ * یکتاسازی فقط درونِ هر منبع است، تا صفحه‌ی هر پلتفرم در دسترس بماند.
+ */
 export const ARTISTS: Artist[] = [
+  { name: 'فرهاد مهراد', subtitle: '۱۳ آلبوم', source: 'apple' },
+  { name: 'فرهاد مهراد', subtitle: '۸۹٬۴۰۰ دنبال‌کننده', source: 'deezer' },
+  { name: 'Farhad Mehrad', subtitle: 'Persian Classic', source: 'spotify' },
+  { name: 'farhad-mehrad', subtitle: '۲٬۱۰۰ دنبال‌کننده', source: 'soundcloud' },
   { name: 'mhrab', subtitle: 'هنرمند', source: 'apple' },
   { name: 'fred', subtitle: 'هنرمند', source: 'deezer' },
   { name: 'hjlrnly', subtitle: 'ساندکلاد', source: 'soundcloud' },
   { name: 'مهیار قدادی', subtitle: 'هنرمند', source: 'apple' },
-  { name: 'مهران قدادی', subtitle: 'ساندکلاد', source: 'soundcloud' },
-  { name: 'فرهاد مهراد', subtitle: '۱۳ آلبوم', source: 'apple' },
 ].map((a, i) => ({
   id: `ar-${i}`,
   name: a.name,
@@ -233,5 +241,10 @@ export function artistDetail(artist: Artist): ArtistDetail {
     subtitle: `${ALBUMS.length} آلبوم`,
     topTracks: TOP_TRACKS,
     albums: [...ALBUMS].sort((a, b) => b.year - a.year),
+    // پلی‌لیستِ همان کاتالوگِ ماک — برای دیدنِ بخشِ پلی‌لیست‌های صفحه بدون سرور
+    playlists: PLAYLISTS.filter((p) => p.source === artist.source),
+    // فقط برای دموی ساندکلاد پر است؛ بقیه‌ی پلتفرم‌ها این تب‌ها را ندارند
+    likedTracks: artist.source === 'soundcloud' ? TOP_TRACKS.slice(0, 3) : [],
+    repostedTracks: artist.source === 'soundcloud' ? TOP_TRACKS.slice(3, 5) : [],
   }
 }
