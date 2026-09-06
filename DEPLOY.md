@@ -78,7 +78,7 @@ curl -fsSL https://raw.githubusercontent.com/mahan-mgn/Unstream/main/deploy/boot
 
 ### ۲. کلیدهای اختیاری (همه در `.env`)
 
-از `.env.docker.example` کپی کن و هرکدام را خواستی باز کن: Spotify (پلی‌لیست/لینک)، Genius (متن آهنگ)، AcoustID/AudD (شناسایی)، Anthropic (چت وایب)، Telegram bot. بدونشان اپ بالا می‌آید، فقط لاغرتر.
+از `.env.docker.example` کپی کن و هرکدام را خواستی باز کن: Spotify (پلی‌لیست/لینک)، Genius (متن آهنگ)، AcoustID/AudD (شناسایی)، Gemini (چت وایب)، Telegram bot. بدونشان اپ بالا می‌آید، فقط لاغرتر.
 
 ---
 

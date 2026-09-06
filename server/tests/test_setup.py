@@ -179,22 +179,36 @@ def test_acoustid_separates_key_from_fpcalc(monkeypatch):
     assert not ok
 
 
-def test_anthropic_distinguishes_model_from_key():
+def test_gemini_distinguishes_model_from_key():
+    """
+    گوگل برای «مدل نیست» و «کلید غلط» هر دو 400 می‌دهد؛ تفکیک فقط از روی
+    متنِ error ممکن است و کاربرِ ایرانی باید بداند کدام بوده.
+    """
     ok, detail = run(
-        su._test_anthropic(
-            _client(lambda r: httpx.Response(404, json={"error": {"message": "model not found"}})),
-            {"UNSTREAM_ANTHROPIC_API_KEY": "sk-ant-x"},
+        su._test_gemini(
+            _client(
+                lambda r: httpx.Response(
+                    400,
+                    json={"error": {"message": "models/gemini-9-flash is not found for API version"}},
+                )
+            ),
+            {"UNSTREAM_GEMINI_API_KEY": "AIza-x"},
         )
     )
     assert not ok and "مدل" in detail
 
-    ok, _ = run(
-        su._test_anthropic(
-            _client(lambda r: httpx.Response(401, json={"error": {"message": "bad key"}})),
-            {"UNSTREAM_ANTHROPIC_API_KEY": "bad"},
+    ok, detail = run(
+        su._test_gemini(
+            _client(
+                lambda r: httpx.Response(400, json={"error": {"message": "API key not valid."}})
+            ),
+            {"UNSTREAM_GEMINI_API_KEY": "bad"},
         )
     )
-    assert not ok
+    assert not ok and "کلید" in detail
+
+    ok, empty = run(su._test_gemini(_client(lambda r: httpx.Response(200, json={})), {}))
+    assert not ok and "خالی" in empty
 
 
 def test_proxy_checks_shape_before_touching_the_network():

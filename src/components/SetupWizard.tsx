@@ -68,11 +68,11 @@ const FIELDS: {
     secret: true,
   },
   {
-    id: 'anthropic',
-    group: ['UNSTREAM_ANTHROPIC_API_KEY'],
-    label: (t) => t.setupClaude,
-    hint: (t) => t.setupClaudeHint,
-    url: 'https://console.anthropic.com/settings/keys',
+    id: 'gemini',
+    group: ['UNSTREAM_GEMINI_API_KEY'],
+    label: (t) => t.setupGemini,
+    hint: (t) => t.setupGeminiHint,
+    url: 'https://aistudio.google.com/apikey',
     secret: true,
   },
   {

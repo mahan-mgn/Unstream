@@ -59,7 +59,7 @@ ALLOWED_KEYS = frozenset(
         "UNSTREAM_GENIUS_ACCESS_TOKEN",
         "UNSTREAM_ACOUSTID_KEY",
         "UNSTREAM_AUDD_TOKEN",
-        "UNSTREAM_ANTHROPIC_API_KEY",
+        "UNSTREAM_GEMINI_API_KEY",
         "UNSTREAM_TELEGRAM_BOT_TOKEN",
         "UNSTREAM_PROXY",
         "UNSTREAM_YTDLP_PROXY",
@@ -266,30 +266,33 @@ async def _test_audd(client: httpx.AsyncClient, v: dict[str, str]) -> tuple[bool
     return True, "توکن پذیرفته شد"
 
 
-async def _test_anthropic(client: httpx.AsyncClient, v: dict[str, str]) -> tuple[bool, str]:
-    key = v.get("UNSTREAM_ANTHROPIC_API_KEY", "").strip()
+async def _test_gemini(client: httpx.AsyncClient, v: dict[str, str]) -> tuple[bool, str]:
+    key = v.get("UNSTREAM_GEMINI_API_KEY", "").strip()
     if not key:
         return False, "کلید خالی است"
+    # کوچک‌ترین درخواستِ ممکن: maxOutputTokens=1 تا سهمیه‌ی رایگان با یک
+    # پاسخِ کامل نسوزد — اینجا فقط کلید و مدل بررسی می‌شوند
     res = await client.post(
-        "https://api.anthropic.com/v1/messages",
-        headers={"x-api-key": key, "anthropic-version": "2023-06-01"},
+        cfg.GEMINI_API_URL.format(model=cfg.GEMINI_MODEL),
+        headers={"x-goog-api-key": key},
         json={
-            "model": cfg.ANTHROPIC_MODEL,
-            "max_tokens": 1,
-            "messages": [{"role": "user", "content": "hi"}],
+            "contents": [{"role": "user", "parts": [{"text": "hi"}]}],
+            "generationConfig": {"maxOutputTokens": 1},
         },
         timeout=20.0,
     )
     if res.status_code == 200:
         return True, "کلید سالم است"
-    if res.status_code in (401, 403):
-        return False, "کلید پذیرفته نشد"
-    if res.status_code == 404:
-        return False, f"مدلِ «{cfg.ANTHROPIC_MODEL}» در دسترس این کلید نیست"
     try:
-        detail = str(res.json().get("error", {}).get("message", ""))[:120]
-    except Exception:
+        detail = str(res.json().get("error", {}).get("message", ""))[:160]
+    except Exception:  # noqa: BLE001 — پاسخِ HTML/متنی از فیلترِ شبکه
         detail = ""
+    # گوگل برای «کلید غلط» و «مدل نیست» هر دو 400 می‌دهد؛ تنها چیزی که جداشان
+    # می‌کند متنِ error است، و کاربر باید بداند کدام بوده
+    if "not found" in detail or "Supported generative" in detail or res.status_code == 404:
+        return False, f"مدلِ «{cfg.GEMINI_MODEL}» در دسترس این کلید نیست"
+    if res.status_code in (401, 403) or "API key" in detail or "API_KEY" in detail:
+        return False, "کلید پذیرفته نشد"
     return False, detail or f"پاسخ {res.status_code}"
 
 
@@ -330,7 +333,7 @@ TESTERS = {
     "genius": _test_genius,
     "acoustid": _test_acoustid,
     "audd": _test_audd,
-    "anthropic": _test_anthropic,
+    "gemini": _test_gemini,
     "telegram": _test_telegram,
     "proxy": _test_proxy,
 }

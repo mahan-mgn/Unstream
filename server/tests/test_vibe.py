@@ -1,5 +1,5 @@
 """
-چت‌بات پیشنهاد پلی‌لیست: تشخیصِ کلیدواژه‌ای، فراخوانیِ Claude (مانک‌شده، بدون
+چت‌بات پیشنهاد پلی‌لیست: تشخیصِ کلیدواژه‌ای، فراخوانیِ Gemini (مانک‌شده، بدون
 شبکه‌ی واقعی)، و resolve_tracks که پیشنهادها را در کاتالوگ پیدا می‌کند.
 
 نکته‌ی قفل‌شده: هیچ مسیری — نبودِ کلید، خطای شبکه، JSON خراب، وایبِ ناشناخته،
@@ -122,7 +122,7 @@ class TestQualifiers:
 class TestSuggestWithoutLlm:
     @pytest.fixture(autouse=True)
     def no_key(self, monkeypatch):
-        monkeypatch.setattr(vibe, "ANTHROPIC_API_KEY", None)
+        monkeypatch.setattr(vibe, "GEMINI_API_KEY", None)
 
     def test_chip_click_uses_canned_vibe_without_touching_client(self):
         # client=None: اگر مسیر چیپ سراغ شبکه می‌رفت، همین‌جا با AttributeError می‌شکست
@@ -161,33 +161,32 @@ class _FakeClient:
 
 
 def _response(status: int, *, json_body: dict | None = None) -> httpx.Response:
-    request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+    request = httpx.Request("POST", "https://generativelanguage.googleapis.com/v1beta/models/x:generateContent")
     return httpx.Response(status, json=json_body, request=request)
+
+
+def _gemini_text(text: str) -> dict:
+    """بدنه‌ی پاسخِ generateContent — فقط یک partِ متنی."""
+    return {"candidates": [{"content": {"role": "model", "parts": [{"text": text}]}}]}
 
 
 class TestCallLlm:
     @pytest.fixture(autouse=True)
     def key(self, monkeypatch):
-        monkeypatch.setattr(vibe, "ANTHROPIC_API_KEY", "test-key")
+        monkeypatch.setattr(vibe, "GEMINI_API_KEY", "test-key")
 
     def test_no_key_short_circuits_without_a_request(self, monkeypatch):
-        monkeypatch.setattr(vibe, "ANTHROPIC_API_KEY", None)
+        monkeypatch.setattr(vibe, "GEMINI_API_KEY", None)
         client = _FakeClient(lambda *a: (_ for _ in ()).throw(AssertionError("should not connect")))
 
         assert asyncio.run(vibe._call_llm(client, "ناراحتم")) is None
 
     def test_successful_response_is_parsed(self):
-        body = {
-            "content": [
-                {
-                    "type": "text",
-                    "text": (
-                        '{"vibe": "sad", "reply": "حالت رو درک می‌کنم.", '
-                        '"picks": [["Someone Like You", "Adele"], ["گریه نکن", "شادمهر عقیلی"]]}'
-                    ),
-                }
-            ]
-        }
+        body = _gemini_text(
+            '{"vibe": "sad", "reply": "حالت رو درک می‌کنم.", '
+            '"picks": [{"title": "Someone Like You", "artist": "Adele"},'
+            '{"title": "گریه نکن", "artist": "شادمهر عقیلی"}]}'
+        )
         client = _FakeClient(lambda *a: _response(200, json_body=body))
 
         result = asyncio.run(vibe._call_llm(client, "خیلی ناراحتم"))
@@ -200,14 +199,10 @@ class TestCallLlm:
 
     def test_response_wrapped_in_markdown_fence_still_parses(self):
         """مدل بعضی‌وقت‌ها با تأکید هم ```json می‌گذارد — نباید کل پاسخ را باطل کند."""
-        body = {
-            "content": [
-                {
-                    "type": "text",
-                    "text": '```json\n{"vibe": "happy", "reply": "چه خوب!", "picks": [["Happy", "Pharrell Williams"]]}\n```',
-                }
-            ]
-        }
+        body = _gemini_text(
+            '```json\n{"vibe": "happy", "reply": "چه خوب!", '
+            '"picks": [{"title": "Happy", "artist": "Pharrell Williams"}]}\n``'
+        )
         client = _FakeClient(lambda *a: _response(200, json_body=body))
 
         result = asyncio.run(vibe._call_llm(client, "خوشحالم"))
@@ -220,21 +215,17 @@ class TestCallLlm:
         assert asyncio.run(vibe._call_llm(client, "متن")) is None
 
     def test_malformed_json_returns_none(self):
-        body = {"content": [{"type": "text", "text": "not json at all"}]}
+        body = _gemini_text("not json at all")
         client = _FakeClient(lambda *a: _response(200, json_body=body))
         assert asyncio.run(vibe._call_llm(client, "متن")) is None
 
     def test_unknown_vibe_in_response_is_rejected(self):
-        body = {
-            "content": [
-                {"type": "text", "text": '{"vibe": "mysterious", "reply": "x", "picks": [["A", "B"]]}'}
-            ]
-        }
+        body = _gemini_text('{"vibe": "mysterious", "reply": "x", "picks": [{"title": "A", "artist": "B"}]}')
         client = _FakeClient(lambda *a: _response(200, json_body=body))
         assert asyncio.run(vibe._call_llm(client, "متن")) is None
 
     def test_empty_picks_is_rejected(self):
-        body = {"content": [{"type": "text", "text": '{"vibe": "sad", "reply": "x", "picks": []}'}]}
+        body = _gemini_text('{"vibe": "sad", "reply": "x", "picks": []}')
         client = _FakeClient(lambda *a: _response(200, json_body=body))
         assert asyncio.run(vibe._call_llm(client, "متن")) is None
 
@@ -245,11 +236,52 @@ class TestCallLlm:
 
         assert asyncio.run(vibe._call_llm(Boom(), "متن")) is None
 
+    def test_blocked_prompt_falls_back_instead_of_crashing(self):
+        """۲۰۰ با promptFeedback.blockReason — متن‌های خشم/غم گاهی سانسور می‌شوند."""
+        body = {"promptFeedback": {"blockReason": "SAFETY"}, "candidates": []}
+        client = _FakeClient(lambda *a: _response(200, json_body=body))
+        assert asyncio.run(vibe._call_llm(client, "خیلی عصبانیم")) is None
+
+    def test_empty_candidates_returns_none(self):
+        """۲۰۰ ولی بی‌candidate (مثلاً MAX_TOKENS) — نباید KeyError بدهد."""
+        client = _FakeClient(lambda *a: _response(200, json_body={"candidates": []}))
+        assert asyncio.run(vibe._call_llm(client, "متن")) is None
+
+    def test_request_carries_schema_and_key_in_header(self):
+        """
+        قراردادِ Gemini: کلید در هدر (نه query)، قالب در responseSchema. اگر
+        روزی کسی این را به سبکِ Anthropic برگرداند، پاسخِ مدل بی‌قالب می‌شود و
+        چت بی‌صدا روی حالتِ کلیدواژه می‌افتد — این تست جلوی آن را می‌گیرد.
+        """
+        captured: dict = {}
+
+        def handler(url, body, headers, timeout):
+            captured["url"], captured["headers"], captured["body"] = url, headers, body
+            return _response(200, json_body=_gemini_text(
+                '{"vibe": "calm", "reply": "باشه.", "picks": [{"title": "A", "artist": "B"}]}'
+            ))
+
+        asyncio.run(vibe._call_llm(_FakeClient(handler), "دلم آرامش میخواد"))
+
+        assert vibe.GEMINI_MODEL in captured["url"]
+        assert captured["headers"]["x-goog-api-key"] == "test-key"
+        assert "anthropic-version" not in captured["headers"]
+        config = captured["body"]["generationConfig"]
+        assert config["responseMimeType"] == "application/json"
+        assert set(config["responseSchema"]["properties"]["picks"]["items"]["properties"]) == {
+            "title",
+            "artist",
+        }
+        assert config["responseSchema"]["properties"]["vibe"]["enum"] == list(vibe.VIBES)
+        # systemInstruction/contents به سبکِ generateContent، نه messages/system
+        assert "systemInstruction" in captured["body"]
+        assert captured["body"]["contents"][0]["parts"][0]["text"] == "دلم آرامش میخواد"
+
 
 class TestSuggestWithLlm:
     @pytest.fixture(autouse=True)
     def key(self, monkeypatch):
-        monkeypatch.setattr(vibe, "ANTHROPIC_API_KEY", "test-key")
+        monkeypatch.setattr(vibe, "GEMINI_API_KEY", "test-key")
 
     def test_llm_result_is_used_when_available(self, monkeypatch):
         fake_result = vibe.VibeResult(
@@ -461,7 +493,7 @@ class TestBuildPlaylist:
         سناریوی «یک پلی لیست غمگین از آهنگ های قدیمی ایرانی میخوام»: هم
         جستجوی پلی‌لیستِ واقعی هم استخرِ برگشتی باید همان قیدها را ببینند.
         """
-        monkeypatch.setattr(vibe, "ANTHROPIC_API_KEY", None)
+        monkeypatch.setattr(vibe, "GEMINI_API_KEY", None)
         captured: dict = {}
 
         async def fake_search_playlists(client, key, qualifiers=vibe.Qualifiers()):

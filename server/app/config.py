@@ -169,11 +169,17 @@ LOUDNESS_TARGET = float(os.getenv("UNSTREAM_LOUDNESS_TARGET", "-14"))
 SPOTIFY_CLIENT_ID = os.getenv("UNSTREAM_SPOTIFY_CLIENT_ID") or None
 SPOTIFY_CLIENT_SECRET = os.getenv("UNSTREAM_SPOTIFY_CLIENT_SECRET") or None
 
-# چت‌بات پیشنهاد پلی‌لیست («وایب»): تشخیص حال‌وهوای پیام با Claude — اختیاری.
+# چت‌بات پیشنهاد پلی‌لیست («وایب»): تشخیص حال‌وهوای پیام با Gemini — اختیاری.
 # بدون کلید، به نگاشتِ کلیدواژه‌ای فارسی برمی‌گردد (server/app/vibe.py).
-# کلید: https://console.anthropic.com/settings/keys
-ANTHROPIC_API_KEY = os.getenv("UNSTREAM_ANTHROPIC_API_KEY") or None
-ANTHROPIC_MODEL = os.getenv("UNSTREAM_ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
+# کلیدِ رایگان: https://aistudio.google.com/apikey
+# مدل عمداً GA است (بدون پسوندِ preview) و قابلِ بازنویسی، چون شناسه‌های
+# Gemini هر چند ماه جابه‌جا می‌شوند و نمی‌خواهیم برای یک تغییرِ اسم دیپلوی کنیم.
+GEMINI_API_KEY = os.getenv("UNSTREAM_GEMINI_API_KEY") or None
+GEMINI_MODEL = os.getenv("UNSTREAM_GEMINI_MODEL", "gemini-2.5-flash")
+# v1beta نه v1: `responseSchema` در v1 کامل پشتیبانی نمی‌شود. در config است چون
+# هم `vibe.py` مصرفش می‌کند هم `setup.py` (آزمایشِ کلید) و setup نباید vibe را
+# import کند.
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
 # تأیید صوتی با AcoustID: بعد از دانلود، فینگرپرینت فایل را با کاتالوگ چک می‌کند
 # تا مطمئن شویم واقعاً همان ترک است. به `fpcalc` (chromaprint) و یک کلید رایگان

@@ -14,7 +14,7 @@ export type SetupKey =
   | 'UNSTREAM_GENIUS_ACCESS_TOKEN'
   | 'UNSTREAM_ACOUSTID_KEY'
   | 'UNSTREAM_AUDD_TOKEN'
-  | 'UNSTREAM_ANTHROPIC_API_KEY'
+  | 'UNSTREAM_GEMINI_API_KEY'
   | 'UNSTREAM_TELEGRAM_BOT_TOKEN'
   | 'UNSTREAM_PROXY'
   | 'UNSTREAM_YTDLP_PROXY'
@@ -26,7 +26,7 @@ export type TestGroup =
   | 'genius'
   | 'acoustid'
   | 'audd'
-  | 'anthropic'
+  | 'gemini'
   | 'telegram'
   | 'proxy'
 

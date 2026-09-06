@@ -126,7 +126,7 @@ describe('SetupWizard', () => {
       'GENIUS_ACCESS_TOKEN',
       'ACOUSTID_KEY',
       'AUDD_TOKEN',
-      'ANTHROPIC_API_KEY',
+      'GEMINI_API_KEY',
       'TELEGRAM_BOT_TOKEN',
       'PROXY',
     ])

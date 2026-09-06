@@ -1,7 +1,7 @@
 """
 چت‌بات پیشنهاد پلی‌لیست بر اساس حال‌وهوا («وایب»).
 
-مسیر تشخیص: اول Claude (اگر UNSTREAM_ANTHROPIC_API_KEY تنظیم شده)، وگرنه نگاشتِ
+مسیر تشخیص: اول Gemini (اگر UNSTREAM_GEMINI_API_KEY تنظیم شده)، وگرنه نگاشتِ
 کلیدواژه‌ایِ فارسیِ زیر. هر دو مسیر یک شکل خروجی می‌دهند: یک وایبِ شناخته‌شده، یک
 پاسخِ همدلانه‌ی فارسی، و چند پیشنهادِ (عنوان، هنرمند).
 
@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import random
 import re
 from dataclasses import dataclass
@@ -29,14 +30,15 @@ from dataclasses import dataclass
 import httpx
 
 from . import catalog
-from .config import ANTHROPIC_API_KEY, ANTHROPIC_MODEL
+from .config import GEMINI_API_KEY, GEMINI_API_URL, GEMINI_MODEL
 from .models import AlbumDetail, Playlist, SearchResults, Track, VibeRequest, VibeSuggestion
 from .providers import deezer, spotify
 
-ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
+log = logging.getLogger(__name__)
+
 # LLM محلیِ تشخیصِ حال‌وهوا؛ کوتاه‌تر از HTTP_TIMEOUT عمومی چون این یک فراخوانیِ
 # تکی است، نه یک زنجیره‌ی provider که ذاتاً کند است
-ANTHROPIC_TIMEOUT = 20.0
+LLM_TIMEOUT = 20.0
 
 # سقفِ نهاییِ پلی‌لیست — بیشتر از این فقط صف را طولانی می‌کند بدون فایده
 MAX_TRACKS = 10
@@ -309,7 +311,7 @@ def detect_from_keywords(text: str) -> str | None:
 #
 # وایب («غمگین») یک محورِ حس‌وحال است. درخواست‌های واقعی گاهی یک محورِ دومِ
 # مستقل هم دارند — دوره یا زبان («یک پلی‌لیست غمگین از آهنگ‌های قدیمی
-# ایرانی»). detect_from_keywords/Claude فقط محورِ اول را می‌فهمند؛ این بخش
+# ایرانی»). detect_from_keywords/Gemini فقط محورِ اول را می‌فهمند؛ این بخش
 # محورِ دوم را از همان متن جدا می‌خواند تا هم استخرِ کنسروی هم جستجوی
 # پلی‌لیستِ واقعی بر اساسش محدود شوند.
 
@@ -385,11 +387,43 @@ def _describe_qualifiers(qualifiers: Qualifiers) -> str:
     return ""
 
 
+# --------- تشخیصِ حال‌وهوا با Gemini (Google AI Studio) ---------
+
+# پاسخِ مدل باید دقیقاً این شکل باشد. `responseSchema` به Gemini تحمیل می‌کند
+# همان قالب را برگرداند (کلیدها به همان ترتیبِ properties)، پس `_parse_llm_json`
+# دیگر «تلاش برای نجاتِ متنِ آزاد» نیست — فقط اعتبارسنجیِ *مقادیر* است: وایبِ
+# ناشناخته، picks خالی و آیتمِ بدشکل هنوز رد می‌شوند چون schema نمی‌تواند
+# «واقعاً وجود داشته باشد» را تضمین کند.
+def _response_schema() -> dict:
+    return {
+        "type": "object",
+        "properties": {
+            "vibe": {"type": "string", "enum": list(VIBES)},
+            "reply": {"type": "string"},
+            "picks": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 12,
+                "items": {
+                    "type": "object",
+                    "properties": {"title": {"type": "string"}, "artist": {"type": "string"}},
+                    "required": ["title", "artist"],
+                },
+            },
+        },
+        "required": ["vibe", "reply", "picks"],
+    }
+
+
 def _parse_llm_json(raw: str) -> VibeResult | None:
     """
-    پاسخِ Claude را به VibeResult تبدیل می‌کند؛ هر انحرافی از قرارداد (وایبِ
+    پاسخِ Gemini را به VibeResult تبدیل می‌کند؛ هر انحرافی از قرارداد (وایبِ
     ناشناس، picks خالی، آیتمِ بدشکل) کل پاسخ را رد می‌کند — نیمه‌معتبر بی‌فایده
     است، مسیر کلیدواژه‌ای جایگزینِ کاملی دارد.
+
+    regexِ `{.*}` می‌ماند با وجودِ responseSchema: مدل‌های قدیمی‌تر یا پاسخِ
+    سانسور‌شده ممکن است هنوز متنِ آزاد یا ```json بدهند، و این یک‌هزینه‌ای است که
+    هر دو حالت را می‌پوشاند.
     """
     match = re.search(r"\{.*\}", raw, re.DOTALL)
     if not match:
@@ -408,11 +442,10 @@ def _parse_llm_json(raw: str) -> VibeResult | None:
         return None
 
     cleaned: list[tuple[str, str]] = [
-        (pick[0].strip(), pick[1].strip())
+        (pick["title"].strip(), pick["artist"].strip())
         for pick in picks
-        if isinstance(pick, list)
-        and len(pick) == 2
-        and all(isinstance(p, str) and p.strip() for p in pick)
+        if isinstance(pick, dict)
+        and all(isinstance(pick.get(p), str) and pick[p].strip() for p in ("title", "artist"))
     ]
     if not cleaned:
         return None
@@ -422,10 +455,10 @@ def _parse_llm_json(raw: str) -> VibeResult | None:
 
 async def _call_llm(client: httpx.AsyncClient, text: str) -> VibeResult | None:
     """
-    تشخیصِ حال‌وهوا با Claude — بی‌صدا None برمی‌گرداند اگر کلید نباشد، شبکه
+    تشخیصِ حال‌وهوا با Gemini — بی‌صدا None برمی‌گرداند اگر کلید نباشد، شبکه
     بیفتد، یا پاسخ معتبر نباشد. suggest() در آن صورت به کلیدواژه می‌افتد.
     """
-    if not ANTHROPIC_API_KEY:
+    if not GEMINI_API_KEY:
         return None
 
     known = ", ".join(VIBES.keys())
@@ -434,7 +467,7 @@ async def _call_llm(client: httpx.AsyncClient, text: str) -> VibeResult | None:
         "STRICT JSON only — no prose, no markdown fences. Shape: "
         '{"vibe": one of [' + known + "], "
         '"reply": a short warm Persian reply (1-2 sentences, matches the mood), '
-        '"picks": [[title, artist], ...]}. '
+        '"picks": [{"title": ..., "artist": ...}, ...]}. '
         "picks must be 8-10 REAL, well-known songs that genuinely fit the mood — "
         "never invent a song. Default to a mix of Persian and international "
         "songs, but the message may also state an explicit constraint beyond "
@@ -449,30 +482,41 @@ async def _call_llm(client: httpx.AsyncClient, text: str) -> VibeResult | None:
 
     try:
         res = await client.post(
-            ANTHROPIC_API_URL,
+            GEMINI_API_URL.format(model=GEMINI_MODEL),
+            # هدر، نه ?key= در آدرس: کلید در query-logها می‌ماند
+            headers={"x-goog-api-key": GEMINI_API_KEY, "content-type": "application/json"},
             json={
-                "model": ANTHROPIC_MODEL,
-                "max_tokens": 1024,
-                "system": system,
-                "messages": [{"role": "user", "content": text}],
+                "systemInstruction": {"parts": [{"text": system}]},
+                "contents": [{"role": "user", "parts": [{"text": text}]}],
+                "generationConfig": {
+                    "temperature": 0.7,
+                    "maxOutputTokens": 1024,
+                    "responseMimeType": "application/json",
+                    "responseSchema": _response_schema(),
+                },
             },
-            headers={
-                "x-api-key": ANTHROPIC_API_KEY,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            timeout=ANTHROPIC_TIMEOUT,
+            timeout=LLM_TIMEOUT,
         )
         res.raise_for_status()
-        blocks = res.json().get("content", [])
-        raw = "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
+        body = res.json()
+        # دو حالتِ «۲۰۰ ولی بی‌پاسخ» مخصوصِ Gemini است و هر دو باید به
+        # کلیدواژه برگردند، نه اینکه کل چت بمیرد:
+        #   promptFeedback.blockReason — متن‌های خشم/غم گاهی سانسور می‌خورند
+        #   candidates خالی یا finishReason=MAX_TOKENS — JSON نصفه
+        blocked = (body.get("promptFeedback") or {}).get("blockReason")
+        if blocked:
+            log.info("gemini blocked the mood message (%s), keyword fallback", blocked)
+            return None
+        parts = ((body.get("candidates") or [{}])[0].get("content") or {}).get("parts") or []
+        raw = "".join(p.get("text", "") for p in parts)
         return _parse_llm_json(raw)
-    except Exception:
+    except Exception:  # noqa: BLE001 — قراردادِ بی‌صدا: چت نباید با قطعیِ گذرا بمیرد
+        log.warning("gemini vibe call failed", exc_info=True)
         return None
 
 
 async def suggest(client: httpx.AsyncClient, req: VibeRequest) -> VibeResult:
-    """تصمیمِ نهایی: چیپِ صریح > Claude > کلیدواژه > پیش‌فرضِ عمومی."""
+    """تصمیمِ نهایی: چیپِ صریح > Gemini > کلیدواژه > پیش‌فرضِ عمومی."""
     if req.vibe and req.vibe in VIBES:
         definition = VIBES[req.vibe]
         return VibeResult(
@@ -512,7 +556,7 @@ async def resolve_tracks(
 
     `exclude` شناسه‌ی ترک‌هایی است که فرانت قبلاً در همین گفتگو نشان داده —
     تضمینِ سخت‌افزاریِ «بدون تکرار» فقط اینجاست: چه پیشنهاد از استخرِ تصادفی
-    بیاید چه از Claude، اگر به همان ترکِ قبلی برسد همین‌جا حذف می‌شود.
+    بیاید چه از Gemini، اگر به همان ترکِ قبلی برسد همین‌جا حذف می‌شود.
     """
     results = await asyncio.gather(
         *(catalog.search(client, f"{title} {artist}") for title, artist in picks),
