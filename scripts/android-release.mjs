@@ -45,10 +45,31 @@ function run(task) {
   if (res.status !== 0) process.exit(res.status ?? 1)
 }
 
+/*
+ * همگام‌سازیِ وب‌اپدیت‌ها داخلِ `android/app/src/main/assets/public` — قبل از هر بیلد.
+
+ این اسکریپت مستقیم gradlew را صدا می‌زند (نه `npm run android:release`)، پس اگر
+ اینجا sync نشود، APK از assetsِ دورِ *قبل* ساخته می‌شود: تست‌ها سبز، بیلد سبز،
+ ولی کدِ تازه داخلِ اپ نیست. یک بار این اتفاق افتاد و تا بازکردنِ خودِ APK با
+ `unzip | grep` کشف نشد. `--no-sync` برای وقتی که مطمئنی assets تازه است.
+*/
+function syncWebAssets() {
+  if (process.argv.includes('--no-sync')) return
+  console.log('› npm run android:sync')
+  const res = spawnSync('npm', ['run', 'android:sync'], {
+    cwd: ROOT,
+    stdio: 'inherit',
+    shell: process.platform === 'win32',
+  })
+  if (res.status !== 0) process.exit(res.status ?? 1)
+}
+
 const { code, name } = await readVersion()
 const wantApk = process.argv.includes('--apk')
 const wantBundle = process.argv.includes('--bundle')
 const publish = process.argv.includes('--publish')
+
+syncWebAssets()
 
 // هیچ فلگی داده نشد → هر دو
 if (!wantApk && !wantBundle) {
