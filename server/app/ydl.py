@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from .config import (
     COOKIES_BROWSER,
     COOKIES_FILE,
@@ -11,6 +13,19 @@ from .config import (
     POT_SERVER_HOME,
     YTDLP_PROXY,
 )
+
+
+def _live(name: str, imported):
+    """
+    مقدارِ *همین لحظه* یک تنظیمِ احراز هویت.
+
+    `config.py` این‌ها را در زمانِ import می‌خواند، ولی ویزاردِ راه‌اندازی
+    (`setup.py`) بی‌ری‌استارت فقط `os.environ` را عوض می‌کند — پس یک
+    `from .config import COOKIES_FILE` کوکیِ تازه‌آپلودشده را بی‌صدا نادیده
+    می‌گرفت تا ری‌استارتِ بعدی (دقیقاً همان «کوکی دادم ولی یوتیوب نشکست»).
+    محیط برنده است؛ نبودش یعنی برگشت به مقدارِ زمانِ استارت‌آپ.
+    """
+    return os.environ.get(name) or imported
 
 BASE_OPTS: dict = {
     "quiet": True,
@@ -34,10 +49,12 @@ def auth_opts() -> dict:
     """
     opts: dict = {}
 
-    if COOKIES_FILE:
-        opts["cookiefile"] = COOKIES_FILE
-    elif COOKIES_BROWSER:
-        opts["cookiesfrombrowser"] = (COOKIES_BROWSER, None, None, None)
+    cookies_file = _live("UNSTREAM_COOKIES_FILE", COOKIES_FILE)
+    cookies_browser = _live("UNSTREAM_COOKIES_BROWSER", COOKIES_BROWSER)
+    if cookies_file:
+        opts["cookiefile"] = cookies_file
+    elif cookies_browser:
+        opts["cookiesfrombrowser"] = (cookies_browser, None, None, None)
 
     # PO Token دو راه دارد و پلاگین هر دو را می‌شناسد: اسکریپت محلی (ویندوز، بدون
     # داکر) یا سرور HTTP جدا (داکر). اگر آدرس HTTP داده شده باشد همان ارجح است،
@@ -70,7 +87,10 @@ def opts(**extra) -> dict:
 
 
 def has_cookies() -> bool:
-    return bool(COOKIES_FILE or COOKIES_BROWSER)
+    return bool(
+        _live("UNSTREAM_COOKIES_FILE", COOKIES_FILE)
+        or _live("UNSTREAM_COOKIES_BROWSER", COOKIES_BROWSER)
+    )
 
 
 def has_jsruntime() -> bool:
