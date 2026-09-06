@@ -368,7 +368,10 @@ _LAUNCH_CWD = os.getcwd()
 
 
 def _in_container() -> bool:
-    return Path("/.dockerenv").exists()
+    # /.dockerenv داکر است؛ RAILWAY_ENVIRONMENT یعنی کانتینرِ Railway — آن‌جا
+    # هم ارجیستراتور (restartPolicyType=ALWAYS + حلقه‌ی entrypoint) سرور را
+    # برمی‌گرداند و نگهبانِ دوم فقط پورت را دعوایی می‌کند.
+    return Path("/.dockerenv").exists() or bool(os.getenv("RAILWAY_ENVIRONMENT"))
 
 
 def _spawn_detached(cmd: list[str]) -> None:

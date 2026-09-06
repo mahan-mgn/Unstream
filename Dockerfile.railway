@@ -1,0 +1,96 @@
+# آنستریم روی Railway — یک کانتینر، یک Volume، یک دامنه.
+#
+# چرا تک‌کانتینر: اپ تک‌مبدأ ساخته شده (nginx هم / را سرو می‌کند هم /api را) و
+# Railway هم Volume را فقط به *یک* سرویس می‌چسباند. پس به‌جای سه سرویسِ
+# docker-compose، هر سه پروسه (nginx + uvicorn + bgutil) داخل همین کانتینر
+# بالا می‌آیند؛ deploy/railway-entrypoint.sh نقش supervisor را بازی می‌کند.
+#
+# در داشبورد: build = Railway JSON (این فایل کنار repo) یا dockerfile path =
+# Dockerfile.railway. Volume روی /data.
+
+# ---------- بیلد فرانت (همان الگوی Dockerfile اصلی) ----------
+FROM node:22-alpine AS build
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY tsconfig.json vite.config.ts index.html ./
+COPY src ./src
+# آیکون‌های PWA و مانیفست — بی‌این خط بیلدِ داکر بی‌صدا ناقص می‌شد (Dockerfile اصلی)
+COPY public ./public
+
+ENV VITE_API_MODE=http
+RUN npm run build
+
+# ---------- رانتایم ----------
+FROM python:3.12-slim
+
+# ffmpeg/nodejs/fpcalc مثل server/Dockerfile؛ nginx اضافه می‌شود چون فرانت
+# هم همین‌جا سرو می‌شود (تک‌مبدأ). Node از NodeSource می‌آید، نه apt:
+# دبیان ۱۸ می‌دهد و bgutil (سرور PO Token) engines>=20 می‌خواهد.
+# libcairo/fonts را canvas (وابستگیِ سرور PO Token) لازم دارد.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ffmpeg \
+        curl \
+        git \
+        build-essential \
+        libchromaprint-tools \
+        ca-certificates \
+        nginx \
+        libcairo2 \
+        libpango-1.0-0 \
+        libgif7 \
+        libjpeg62-turbo \
+        libwebp7 \
+        libfontconfig1 \
+        fonts-liberation \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/* \
+    # پیش‌فرض دبیان یک server بلاک روی پورت ۸۰ دارد که default_server است و
+    # ترافیک را از کانفگ ما می‌رباید
+    && rm -f /etc/nginx/sites-enabled/default
+
+# ---------- سرور PO Token (یوتیوب) ----------
+# نسخه باید با پلاگین پایتون (requirements.txt) یکی باشد: 1.3.1
+# چرا اینجا و نه در stage جدا: canvas یک بلاینریِ native می‌سازد که به
+# کتابخانه‌های *همان* بیس‌ایمیج بایند می‌چسبد؛ کپی‌کردنش بین بیس‌های متفاوت
+# (node:22 → python-slim) شکست‌پذیر است. build-essential بعد از بیلد پاک
+# می‌شود تا ایمیج نهایی سبک بماند.
+RUN git clone --depth 1 --branch 1.3.1 \
+      https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git /opt/bgutil
+COPY server/bgutil-keepalive.patch /tmp/p.patch
+# پچ keepAlive: بدونش بعضی شبکه‌ها ECONNRESET می‌دهند؛ اگر روزی upstream خورد
+# کرد، بیلد نباید به‌خاطرش بمیرد
+RUN cd /opt/bgutil && (git apply /tmp/p.patch || echo "patch skipped") \
+ && cd /opt/bgutil/server \
+ && npm ci --no-audit --no-fund \
+ && npx tsc \
+ && test -f build/main.js \
+ && apt-get purge -y build-essential git \
+ && apt-get autoremove -y \
+ && rm -rf /root/.npm /tmp/*
+
+WORKDIR /app/server
+
+COPY server/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY server/app ./app
+COPY --from=build /app/dist /usr/share/nginx/html
+COPY deploy/nginx.railway.conf /etc/nginx/conf.d/default.conf
+COPY deploy/railway-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# مسیرها روی Volume؛ POT از طریق HTTPِ لوکال (همان حالت compose)
+ENV UNSTREAM_DOWNLOAD_DIR=/data/downloads \
+    UNSTREAM_DATA_DIR=/data/db \
+    UNSTREAM_JS_RUNTIME=node \
+    UNSTREAM_POT_BASE_URL=http://127.0.0.1:4416 \
+    PYTHONUNBUFFERED=1
+
+EXPOSE 8080
+
+CMD ["/entrypoint.sh"]
