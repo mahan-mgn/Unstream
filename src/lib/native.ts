@@ -29,11 +29,13 @@ export interface PlaybackMeta {
   duration: number
 }
 
-export type TransportAction = 'play' | 'pause' | 'next' | 'prev' | 'stop' | 'seek'
+export type TransportAction = 'play' | 'pause' | 'next' | 'prev' | 'stop' | 'seek' | 'sleep'
 
 interface PlaybackPlugin {
   sync(options: PlaybackMeta): Promise<void>
   stop(): Promise<void>
+  /** تایمرِ خواب روی ساعتِ سیستم؛ ۰ یعنی لغو */
+  setSleepTimer(options: { minutes: number }): Promise<void>
   ensurePermission(): Promise<{ granted: boolean }>
   addListener(
     event: 'transport',
@@ -49,14 +51,35 @@ interface SafeInsets {
   right?: number
 }
 
+export interface AppInfo {
+  versionCode: number
+  versionName: string
+}
+
+export type ShortcutRoute = 'search' | 'resume' | 'liked' | ''
+
 interface ShellPlugin {
   insets(): Promise<SafeInsets>
   takeSharedText(): Promise<{ text: string }>
+  /** نسخه‌ی نصب‌شده — برای مقایسه با `GET /api/release` */
+  appInfo(): Promise<AppInfo>
+  /** آیا کاربر اپ را از دست‌کاریِ باتری مستثنا کرده؟ */
+  batteryStatus(): Promise<{ ignoring: boolean; canAsk: boolean }>
+  openBatterySettings(): Promise<void>
+  openAppSettings(): Promise<void>
+  openExternal(options: { url: string }): Promise<void>
+  /** نشانِ مرگِ موتورِ رندر را می‌خواند و پاک می‌کند */
+  takeCrash(): Promise<{ text: string }>
+  /** میان‌بُرِ لانچری که اپ را باز کرده (اگر پیش از سوارشدنِ رابط رسیده باشد) */
+  takeRoute(): Promise<{ route: ShortcutRoute }>
   addListener(event: 'insets', handler: (data: SafeInsets) => void): Promise<PluginListenerHandle>
   addListener(
     event: 'shared',
     handler: (data: { text: string }) => void,
   ): Promise<PluginListenerHandle>
+  addListener(event: 'route', handler: (data: { route: ShortcutRoute }) => void): Promise<
+    PluginListenerHandle
+  >
 }
 
 interface DownloadsPlugin {
@@ -93,6 +116,31 @@ export function syncPlayback(meta: PlaybackMeta): void {
 export function stopPlaybackNotification(): void {
   if (!isNativeApp()) return
   void Playback.stop().catch(() => {})
+}
+
+/**
+ * تایمرِ خواب را به ساعتِ اندروید می‌سپارد (۰ = لغو).
+ *
+ * چرا نیتیو؟ `setTimeout` داخل WebView با خاموش‌شدنِ صفحه throttle می‌شود، پس
+ * «۲۰ دقیقه» عملاً ۲۵ دقیقه یا بیشتر می‌شد — و بدترین حالت این است که تایمری
+ * که باید خاموش کند، خاموش نکند. زنگش با رویدادِ `sleep` به JS برمی‌گردد و
+ * مکثِ واقعی همان‌جا انجام می‌شود: منطقِ صف این‌جا نمی‌آید.
+ */
+export function setNativeSleepTimer(minutes: number): void {
+  if (!isNativeApp()) return
+  void Playback.setSleepTimer({ minutes: Math.max(0, Math.round(minutes)) }).catch(() => {})
+}
+
+/** رویدادِ پایانِ تایمرِ خوابِ نیتیو */
+export function onSleepFired(handler: () => void): () => void {
+  if (!isNativeApp()) return () => {}
+  let handle: PluginListenerHandle | undefined
+  void Playback.addListener('transport', ({ action }) => {
+    if (action === 'sleep') handler()
+  }).then((h) => {
+    handle = h
+  })
+  return () => void handle?.remove()
 }
 
 /** دکمه‌های نوتیفیکیشن/صفحه‌ی قفل/هدفون → پخش‌کننده‌ی جاوااسکریپتی */
@@ -290,6 +338,112 @@ export function onSharedText(handler: (text: string) => void): () => void {
 
   let handle: PluginListenerHandle | undefined
   void Shell.addListener('shared', ({ text }) => text && handler(text)).then((h) => {
+    handle = h
+  })
+  return () => void handle?.remove()
+}
+
+/* ---------- نسخه، باتری، کرش ---------- */
+
+/** نسخه‌ی نصب‌شده. روی وب null است — آنجا «بروزرسانیِ APK» معنا ندارد. */
+export async function nativeAppInfo(): Promise<AppInfo | null> {
+  if (!isNativeApp()) return null
+  try {
+    return await Shell.appInfo()
+  } catch {
+    return null
+  }
+}
+
+/**
+ * آیا اپ از دست‌کاریِ باتری مستثناست؟
+ *
+ * `null` یعنی سؤال‌کردن ممکن نبود (وب، یا اندرویدِ بدونِ این API) — که با
+ * `false` فرق دارد: «نمی‌دانیم» نباید به کاربر پیامِ «برو این‌را روشن کن»
+ * بدهد.
+ */
+export async function batteryIgnoring(): Promise<boolean | null> {
+  if (!isNativeApp()) return null
+  try {
+    const { ignoring, canAsk } = await Shell.batteryStatus()
+    return canAsk ? ignoring : null
+  } catch {
+    return null
+  }
+}
+
+/** صفحه‌ی تنظیماتِ «اپ‌های بدونِ دست‌کاریِ باتری» — کاربر خودش تصمیم می‌گیرد */
+export async function openBatterySettings(): Promise<boolean> {
+  if (!isNativeApp()) return false
+  try {
+    await Shell.openBatterySettings()
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** تنظیماتِ خودِ اپ — آخرین راهِ رسیدن به «اجازه‌ها» و «باتری» */
+export async function openAppSettings(): Promise<boolean> {
+  if (!isNativeApp()) return false
+  try {
+    await Shell.openAppSettings()
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** یک آدرس را بیرونِ اپ باز می‌کند (مرورگر). برای نصبِ APK لازم است. */
+export async function openExternal(url: string): Promise<boolean> {
+  if (!isNativeApp()) {
+    window.open(url, '_blank', 'noopener')
+    return true
+  }
+  try {
+    await Shell.openExternal({ url })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * اگر موتورِ رندر در اجرای *قبلی* مرده باشد، متنش را می‌دهد (و پاکش می‌کند).
+ *
+ * یک‌بار مصرف است: یک مرگ باید یک بار گزارش شود، نه هر بار که اپ بالا بیاید.
+ */
+export async function takeRendererCrash(): Promise<string | null> {
+  if (!isNativeApp()) return null
+  try {
+    const { text } = await Shell.takeCrash()
+    return text && text.trim() ? text : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * میان‌بُرِ لانچری که اپ را باز کرده — اگر پیش از سوارشدنِ رابط رسیده باشد.
+ *
+ * حالتِ «اپ باز بود» از طریقِ رویدادِ `route` می‌آید (`onShortcut`)؛ این یکی
+ * حالتِ «اپ بسته بود». مثلِ `takeSharedText`، خواندن یعنی برداشتن.
+ */
+export async function takeShortcutRoute(): Promise<ShortcutRoute> {
+  if (!isNativeApp()) return ''
+  try {
+    const { route } = await Shell.takeRoute()
+    return route ?? ''
+  } catch {
+    return ''
+  }
+}
+
+/** میان‌بُر زده شد وقتی اپ باز بود */
+export function onShortcut(handler: (route: ShortcutRoute) => void): () => void {
+  if (!isNativeApp()) return () => {}
+  let handle: PluginListenerHandle | undefined
+  void Shell.addListener('route', ({ route }) => route && handler(route)).then((h) => {
     handle = h
   })
   return () => void handle?.remove()

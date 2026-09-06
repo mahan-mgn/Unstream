@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { readStoredAs, writeStored } from './storage'
+import { readStored, writeStored } from './storage'
 import { fa } from './format'
 
 export type Lang = 'fa' | 'en'
@@ -523,9 +523,9 @@ const DICT = {
     setupTelegram: 'بات تلگرام',
     setupTelegramHint:
       'اسم آهنگ یا لینک به بات بفرست، فایل برمی‌گردد. توکن رایگان از @BotFather با /newbot.',
-    setupClaude: 'تشخیصِ حال‌وهوا (Claude)',
-    setupClaudeHint:
-      'چت‌باتِ «پلی‌لیست غمگین شب» را دقیق می‌کند. بدون کلید، نگاشتِ کلیدواژه‌ایِ فارسی کار می‌کند.',
+    setupGemini: 'تشخیصِ حال‌وهوا (Gemini)',
+    setupGeminiHint:
+      'چت‌باتِ «پلی‌لیست غمگین شب» را دقیق می‌کند. کلیدِ رایگان از Google AI Studio؛ بدون کلید، نگاشتِ کلیدواژه‌ایِ فارسی کار می‌کند.',
     setupGenius: 'متن آهنگ از Genius',
     setupGeniusHint: 'جایگزینِ LRCLIB وقتی چیزی پیدا نشد. فقط متنِ ساده، بدون هم‌زمان‌سازی.',
     setupAcoustid: 'تأییدِ صوتی (AcoustID)',
@@ -546,6 +546,20 @@ const DICT = {
     setupKeysFootnote:
       'کلیدها روی همین سرور ذخیره می‌شوند و هیچ‌وقت به مرورگر برنمی‌گردند. هر وقت خواستی از لینک «راه‌اندازی» پایینِ صفحه دوباره باز می‌شود.',
     setupMenu: 'راه‌اندازی',
+
+    // ---------- بروزرسانیِ اپ و باتری (فقط اندروید) ----------
+    updateAvailable: (version: string) => `نسخه‌ی ${version} آماده‌ی نصب است`,
+    updateFrom: (from: string, to: string) => `${from} ← ${to}`,
+    updateInstall: 'دریافتِ نسخه',
+    updateLater: 'بعداً',
+    updateNoFile: 'فایلش روی سرور نیست — دستی منتشرش کن',
+    updateOpened: 'در مرورگر باز شد؛ بعد از دانلود، نصبش کن',
+    updateCopied: 'لینک کپی شد — در مرورگر باز کن',
+    batteryRow: 'پخشِ بی‌قطع در پس‌زمینه',
+    batteryOn: 'دست‌کاریِ باتری روی این اپ خاموش است',
+    batteryOff: 'اندروید می‌تواند پخش را وسطِ آهنگ بخواباند',
+    batteryFix: 'روشن‌کردن',
+    batteryUnknown: 'نمی‌شود پرسید',
 
     settings: 'تنظیمات',
     language: 'زبان',
@@ -1059,8 +1073,9 @@ const DICT = {
     setupProxyHint: 'Format: socks5h://127.0.0.1:1080 or http://127.0.0.1:3128. Applies to all outbound traffic.',
     setupTelegram: 'Telegram bot',
     setupTelegramHint: 'Send the bot a song name or a link, get the file back. Free token from @BotFather with /newbot.',
-    setupClaude: 'Mood detection (Claude)',
-    setupClaudeHint: 'Makes the “sad night playlist” chat accurate. Without a key, a Persian keyword map is used.',
+    setupGemini: 'Mood detection (Gemini)',
+    setupGeminiHint:
+      'Makes the “sad night playlist” chat accurate. Free key from Google AI Studio; without one, a Persian keyword map is used.',
     setupGenius: 'Lyrics from Genius',
     setupGeniusHint: 'Fallback for LRCLIB when it finds nothing. Plain text only, no timing.',
     setupAcoustid: 'Audio verification (AcoustID)',
@@ -1080,6 +1095,20 @@ const DICT = {
     setupKeysFootnote:
       'Keys are stored on this server and never sent back to the browser. The “Setup” link at the bottom of the page always brings this back.',
     setupMenu: 'Setup',
+
+    // ---------- app update + battery (Android only) ----------
+    updateAvailable: (version: string) => `Version ${version} is ready to install`,
+    updateFrom: (from: string, to: string) => `${from} → ${to}`,
+    updateInstall: 'Get update',
+    updateLater: 'Later',
+    updateNoFile: 'No file on the server yet — publish it manually',
+    updateOpened: 'Opened in your browser; install it after it downloads',
+    updateCopied: 'Link copied — open it in a browser',
+    batteryRow: 'Uninterrupted background playback',
+    batteryOn: 'Battery optimization is off for this app',
+    batteryOff: 'Android may put playback to sleep mid-track',
+    batteryFix: 'Fix',
+    batteryUnknown: 'Cannot check',
 
     settings: 'Settings',
     language: 'Language',
@@ -1107,8 +1136,30 @@ function applyLang(lang: Lang) {
  * ایمپورت می‌کند — یعنی هر استثنایی اینجا، قبل از اولین رندر کلِ اپ را
  * می‌خواباند. مرورگری که ذخیره‌سازیِ سایت را بسته دقیقاً همین کار را می‌کرد.
  */
-const stored = readStoredAs<Lang>('lang', 'fa')
-const initial: Lang = stored === 'en' ? 'en' : 'fa'
+/**
+ * زبانِ دستگاه، فقط برای نصبِ *اول*.
+ *
+ * `res/xml/locales_config.xml` به اندروید می‌گوید این اپ fa/en را می‌شناسد، پس
+ * کاربر می‌تواند از تنظیماتِ سیستم زبانِ همین اپ را جدا انتخاب کند و آن انتخاب
+ * به `navigator.language` داخل WebView می‌رسد. بدونِ این خط، آن تنظیمِ سیستم
+ * بی‌اثر می‌ماند.
+ *
+ * قیدِ «فقط نصبِ اول» عمدی است: به‌محضِ این‌که کاربر از داخلِ اپ زبانی را
+ * انتخاب کرد، `applyLang` آن را ذخیره می‌کند و دیگر هیچ‌وقت پرسیده نمی‌شود.
+ * یک اپِ موسیقیِ فارسی‌زبان نباید با سفرِ کاربر به تنظیماتِ اندروید، رابطش را
+ * وسطِ کار عوض کند.
+ */
+export function systemLang(raw: string | undefined): Lang | null {
+  if (!raw) return null
+  const base = raw.toLowerCase().split(/[-_]/)[0]
+  return base === 'fa' || base === 'en' ? base : null
+}
+
+const stored = readStored('lang')
+const initial: Lang =
+  stored === 'en' || stored === 'fa'
+    ? stored
+    : (systemLang(typeof navigator === 'undefined' ? undefined : navigator.language) ?? 'fa')
 applyLang(initial)
 
 export const useI18n = create<I18nState>((set) => ({

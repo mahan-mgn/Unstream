@@ -7,6 +7,7 @@ import SearchBar from './SearchBar'
 import type { Tab } from './TabBar'
 import { DotsIcon, HeadphonesIcon, LinkIcon, MicIcon, MoonIcon, PhoneIcon, SunIcon } from './icons'
 import { isLocalServer, isNativeApp, serverBase } from '../lib/server'
+import { BatteryRow } from './NativeHealth'
 import { useSettings } from '../store/settings'
 
 interface Props {
@@ -161,6 +162,9 @@ function OverflowMenu({ onIdentify, onServer }: { onIdentify: () => void; onServ
             )}
             {theme === 'dark' ? t.themeLight : t.themeDark}
           </button>
+
+          {/* ردیفِ سلامتِ نصب (باتری) — روی وب هیچ رندر نمی‌شود */}
+          <BatteryRow />
         </div>
       )}
     </div>

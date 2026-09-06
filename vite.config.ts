@@ -67,6 +67,11 @@ export default defineConfig({
      * به jsdom نیاز دارد و این‌جا نیست.
      */
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    /*
+     * زبان را روی فارسی میخکوب می‌کند. ادعاهایِ تست‌ها روی متنِ رندرشده است و
+     * متن به `navigator.language` (محیطِ ماشین) وابسته نباشد.
+     */
+    setupFiles: ['src/test/env.ts'],
   },
   server: {
     // روی همه‌ی اینترفیس‌ها گوش می‌دهد، نه فقط localhost — وگرنه گوشی که روی

@@ -618,3 +618,33 @@ class FollowState(BaseModel):
 
 class TelegramHeartbeat(BaseModel):
     username: str | None = None
+
+
+# ---------- توزیعِ نسخه‌ی اندروید ----------
+
+
+class ReleaseInfo(BaseModel):
+    """
+    آخرین APKِ منتشرشده روی همین سرور.
+
+    `versionCode` عدد است چون مقایسه‌ی رشته‌ای «۱۰» را کوچک‌تر از «۹» می‌بیند و
+    اپ برای همیشه بنرِ دروغین نشان می‌دهد. `apkUrl` خالی یعنی manifest هست ولی
+    فایلش روی دیسک نیست — آن‌وقت بنر باید «خبر دارم ولی نمی‌دهم» باشد نه شکست.
+    """
+
+    versionCode: int
+    versionName: str
+    notes: str = ""
+    apkUrl: str | None = None
+    bytes: int = 0
+
+
+class ClientError(BaseModel):
+    """یک خطای سمتِ کاربر (WebView) — همان چیزی که هیچ لاگِ سروری ندارد."""
+
+    kind: str = "error"
+    message: str = ""
+    stack: str = ""
+    url: str = ""
+    app: str = ""
+    device: str = ""

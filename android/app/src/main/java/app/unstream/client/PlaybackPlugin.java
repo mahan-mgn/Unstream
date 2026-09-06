@@ -79,6 +79,30 @@ public class PlaybackPlugin extends Plugin {
         call.resolve();
     }
 
+    /**
+     * تایمرِ خواب را به ساعتِ سیستم می‌سپارد.
+     *
+     * `minutes: 0` یعنی لغو. چرا نیتیو؟ چون `setTimeout` داخل WebView با
+     * خاموش‌شدنِ صفحه throttle می‌شود و تایمری که باید گوشی را خاموش کند،
+     * خاموش نمی‌کند. بقیه‌ی کار (مکثِ واقعی، پاک‌شدنِ UI) در JS می‌ماند و از
+     * همین‌جا با رویدادِ `sleep` خبردار می‌شود.
+     */
+    @PluginMethod
+    public void setSleepTimer(PluginCall call) {
+        int minutes = call.getInt("minutes", 0);
+        Intent intent = new Intent(getContext(), PlaybackService.class);
+        intent.setAction(PlaybackService.ACTION_SLEEP);
+        intent.putExtra("minutes", minutes);
+        try {
+            // سرویس در این لحظه بالا نیست مگر چیزی در حالِ پخش باشد؛ اگر نبود،
+            // startService معمولی کافی است و startForegroundService لازم نیست
+            getContext().startService(intent);
+        } catch (Exception ignored) {
+            // پروسه در حالِ کشته‌شدن است؛ JS تایمرِ خودش را نگه می‌دارد
+        }
+        call.resolve();
+    }
+
     /** پخش بسته شد — نوتیفیکیشن و سرویس هر دو می‌روند */
     @PluginMethod
     public void stop(PluginCall call) {

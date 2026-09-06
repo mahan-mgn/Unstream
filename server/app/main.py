@@ -19,6 +19,7 @@ from . import (
     artblur,
     artcache,
     catalog,
+    clientlog,
     catcache,
     db,
     downloader,
@@ -27,6 +28,7 @@ from . import (
     loudness,
     paths,
     reach,
+    releases,
     resolver,
     setup,
     split,
@@ -37,7 +39,6 @@ from . import (
 )
 from .config import (
     ALLOWED_ORIGINS,
-    ANTHROPIC_API_KEY,
     ART_MIRROR_ENABLED,
     ART_WARM_BATCH,
     ART_WARM_ENABLED,
@@ -48,6 +49,7 @@ from .config import (
     DOWNLOAD_DIR,
     FFMPEG_LOCATION,
     FILE_RETENTION_SECONDS,
+    GEMINI_API_KEY,
     HTTP_TIMEOUT,
     JS_RUNTIME,
     LOUDNESS_ENABLED,
@@ -63,6 +65,7 @@ from .models import (
     ArtistDetail,
     CandidateOption,
     CandidateRequest,
+    ClientError,
     ChapterInfo,
     ChaptersInfo,
     DailyMix,
@@ -80,6 +83,7 @@ from .models import (
     PlaylistCreate,
     PlaylistItemsRequest,
     PlaylistUpdate,
+    ReleaseInfo,
     SearchResults,
     SongInfo,
     SplitRequest,
@@ -221,9 +225,64 @@ async def health() -> dict:
             "split": bool(FFMPEG_LOCATION),
             "fileRetentionDays": round(FILE_RETENTION_SECONDS / 86400, 1),
             # بدون این، چت‌بات وایب فقط با نگاشت کلیدواژه‌ای کار می‌کند
-            "vibeLlm": bool(ANTHROPIC_API_KEY),
+            "vibeLlm": bool(GEMINI_API_KEY),
         },
     }
+
+
+# ---------- توزیعِ نسخه‌ی اندروید و گزارشِ خطا ----------
+
+
+@app.get("/api/release", response_model=ReleaseInfo | None)
+async def release_latest() -> ReleaseInfo | None:
+    """
+    آخرین APKِ منتشرشده، یا null یعنی چیزی منتشر نشده.
+
+    اپ با `versionCode` خودش مقایسه می‌کند؛ این‌جا فقط خبر می‌دهیم، تصمیم
+    نمی‌گیریم — نسخه‌ی نصب‌شده را فقط خودِ اپ می‌داند.
+    """
+    info = await asyncio.to_thread(releases.current)
+    if info is None:
+        return None
+    size = info.apk.stat().st_size if info.apk else 0
+    return ReleaseInfo(
+        versionCode=info.version_code,
+        versionName=info.version_name,
+        notes=info.notes,
+        apkUrl="/api/release/apk" if info.apk else None,
+        bytes=size,
+    )
+
+
+@app.get("/api/release/apk")
+async def release_apk() -> FileResponse:
+    """خودِ فایل. `Content-Disposition` نام می‌دهد تا مرورگر/اندروید درستش کنند."""
+    info = await asyncio.to_thread(releases.current)
+    if info is None or info.apk is None:
+        raise HTTPException(404, "نسخه‌ای منتشر نشده")
+    return FileResponse(
+        info.apk,
+        filename=info.apk.name,
+        media_type="application/vnd.android.package-archive",
+    )
+
+
+@app.post("/api/client-error")
+async def client_error(req: ClientError) -> dict:
+    """
+    دریافتِ خطای WebView. همیشه ۲۰۰ — حتی اگر نوشتن شکست خورد.
+
+    فرانت این را در `window.onerror` صدا می‌زند؛ پاسخِ خطا خودش یک خطای دیگر
+    می‌سازد و چرخه ادامه پیدا می‌کند. اینجا سکوت، درست‌ترین جواب است.
+    """
+    ok = await asyncio.to_thread(clientlog.record, req.model_dump())
+    return {"ok": ok}
+
+
+@app.get("/api/client-error/recent")
+async def client_error_recent(limit: int = 50) -> list[dict]:
+    """چند خطای آخر برای نگاه‌کردنِ آدمِ مسئولِ سرور (نه اپ)."""
+    return await asyncio.to_thread(clientlog.recent, max(1, min(limit, 200)))
 
 
 @app.get("/api/net")

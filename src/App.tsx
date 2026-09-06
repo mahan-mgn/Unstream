@@ -4,6 +4,7 @@ import Footer from './components/Footer'
 import Header from './components/Header'
 import Home from './components/Home'
 import OfflineBar from './components/OfflineBar'
+import { UpdateBanner } from './components/NativeHealth'
 import MoodChat from './components/MoodChat'
 import PlayerBar from './components/PlayerBar'
 import SearchResults from './components/SearchResults'
@@ -17,7 +18,7 @@ import Toaster from './components/Toaster'
 import { api, API_MODE } from './lib/api'
 import { closeTopLayer } from './lib/back'
 import { isArtistUrl, isUrl } from './lib/format'
-import { onBackButton, onSharedText } from './lib/native'
+import { onBackButton, onSharedText, onShortcut, takeShortcutRoute, type ShortcutRoute } from './lib/native'
 import { useI18n } from './lib/i18n'
 import { fetchSetupState } from './lib/setup'
 import { isNativeApp, needsSetup } from './lib/server'
@@ -224,6 +225,34 @@ export default function App() {
   useEffect(() => {
     window.addEventListener('unstream:open-liked', goLiked)
     return () => window.removeEventListener('unstream:open-liked', goLiked)
+  }, [goLiked])
+
+  /*
+   * میان‌بُرهایِ لانچر (انگشت‌فشردِ آیکون اپ).
+   *
+   * دو حالت دارند و هر دو باید کار کنند: اپ *بسته* بوده (اینتنت زودتر از سوار
+   * شدنِ رابط رسیده → `takeShortcutRoute`) یا *باز* بوده (رویدادِ `route`).
+   * مثلِ اشتراک‌گذاری.
+   *
+   * مقصدها از همان رویدادهای داخلیِ خودِ کامپوننت‌ها رد می‌شوند — `search` را
+   * SearchBar می‌گیرد، `resume` را PlayerBar. این‌جا فقط «کدام» تصمیم گرفته
+   * می‌شود، نه «چطور».
+   */
+  useEffect(() => {
+    const apply = (route: ShortcutRoute) => {
+      if (!route) return
+      if (route === 'search') {
+        window.dispatchEvent(new Event('unstream:focus-search'))
+      } else if (route === 'liked') {
+        goLiked()
+      } else {
+        // resume: نوارِ پخش را باز می‌کند؛ اگر چیزی در صف نباشد همان خانه می‌ماند
+        window.dispatchEvent(new Event('unstream:expand-player'))
+      }
+    }
+    const off = onShortcut(apply)
+    void takeShortcutRoute().then(apply)
+    return off
   }, [goLiked])
 
   // بدون این، رفتن به یک آلبوم/هنرمند/نتیجه‌ی جدید همان اسکرولِ صفحه‌ی قبل را
@@ -462,6 +491,10 @@ export default function App() {
       />
 
       <OfflineBar />
+
+      {/* بنرِ «نسخه‌ی تازه هست» — فقط روی اندروید و فقط وقتی سرور نسخه‌ی
+          تازه‌تری از نصبِ فعلی اعلام کرده باشد */}
+      <UpdateBanner />
 
       {/* 5xl نه 6xl: در ۱۴۴۰ پیکسل، ستونِ ۱۱۵۲ پیکسلی دو سویِ ردیف‌های آلبوم/
           هنرمند خلاِ مرده می‌ساخت؛ ۱۰۲۴ تراکمِ سالمی به ردیف‌ها می‌دهد */}

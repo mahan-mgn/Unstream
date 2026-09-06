@@ -14,4 +14,12 @@
     <string name="media_pause">مکث</string>
     <string name="media_next">بعدی</string>
     <string name="media_prev">قبلی</string>
+
+    <!-- میان‌بُرهایِ لانچر (res/xml/shortcuts.xml) -->
+    <string name="shortcut_search_short">جستجو</string>
+    <string name="shortcut_search_long">جستجوی آهنگ</string>
+    <string name="shortcut_resume_short">ادامه</string>
+    <string name="shortcut_resume_long">ادامه‌ی پخش</string>
+    <string name="shortcut_liked_short">لایک‌ها</string>
+    <string name="shortcut_liked_long">آهنگ‌های لایک‌شده</string>
 </resources>

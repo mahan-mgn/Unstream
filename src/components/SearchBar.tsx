@@ -59,7 +59,16 @@ export default function SearchBar({ value, loading, onSearch }: Props) {
       input.current?.focus()
     }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+
+    /* میان‌بُرِ لانچری «جستجو» — اپ را باز می‌کند و کاربر از همان‌جا تایپ
+       می‌کند. بدونِ این، میان‌بُر فقط صفحه را باز می‌کرد و هیچ کادری فعال
+       نمی‌شد؛ یعنی یک ضربه‌ی هدررفته. */
+    const onFocus = () => input.current?.focus()
+    window.addEventListener('unstream:focus-search', onFocus)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('unstream:focus-search', onFocus)
+    }
   }, [])
 
   const submit = (raw: string) => {

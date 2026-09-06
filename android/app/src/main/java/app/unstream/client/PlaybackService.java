@@ -10,7 +10,9 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.PowerManager;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
@@ -46,6 +48,7 @@ public class PlaybackService extends Service {
 
     public static final String ACTION_SYNC = "app.unstream.client.SYNC";
     public static final String ACTION_STOP = "app.unstream.client.STOP";
+    public static final String ACTION_SLEEP = "app.unstream.client.SLEEP";
 
     private static final String CHANNEL_ID = "unstream.playback";
     private static final int NOTIFICATION_ID = 0x555;
@@ -69,6 +72,18 @@ public class PlaybackService extends Service {
 
     private MediaSessionCompat session;
     private PowerManager.WakeLock wakeLock;
+
+    /*
+     * تایمرِ خواب روی نخِ *سیستم*، نه تایمرِ جاوااسکریپتی.
+     *
+     * `setTimeout` داخل WebView با خوابیدنِ صفحه throttle می‌شود (بعضی ROMها آن
+     * را چند دقیقه‌ای به تعویق می‌اندازند)، پس «۲۰ دقیقه» عملاً «۲۵ دقیقه» یا
+     * بیشتر می‌شد — و بدترین حالت این است که چیزی که باید خاموش کند، خاموش
+     * نکند. اینجا همان زمان‌سنجی را اندروید انجام می‌دهد و فقط زنگش را به JS
+     * می‌فرستد؛ منطقِ «چه چیزی پخش شود» همچنان مالِ JS می‌ماند.
+     */
+    private final Handler clock = new Handler(Looper.getMainLooper());
+    private Runnable sleepTask;
     private final ExecutorService artworkPool = Executors.newSingleThreadExecutor();
 
     /* آخرین متادیتای دریافتی — نوتیفیکیشن با هر همگام‌سازی از همین‌ها بازساخته می‌شود */
@@ -148,6 +163,12 @@ public class PlaybackService extends Service {
             return START_NOT_STICKY;
         }
 
+        if (ACTION_SLEEP.equals(intent.getAction())) {
+            // صفر یعنی لغو. `minutes` از JS می‌آید و همان چیزی است که کاربر در
+            // اسلایدر دیده — اینجا فقط زمان‌سنجی می‌کند، تصمیم نمی‌گیرد
+            armSleep(intent.getIntExtra("minutes", 0));
+        }
+
         if (ACTION_SYNC.equals(intent.getAction())) {
             title = orEmpty(intent.getStringExtra("title"));
             artist = orEmpty(intent.getStringExtra("artist"));
@@ -169,6 +190,21 @@ public class PlaybackService extends Service {
         // دکمه‌های هدفون و بلوتوث از همین‌جا به سشن می‌رسند
         MediaButtonReceiver.handleIntent(session, intent);
         return START_NOT_STICKY;
+    }
+
+    /** تایمرِ خواب را می‌نشاند (۰ = لغو) و قبلی را باطل می‌کند */
+    private void armSleep(int minutes) {
+        if (sleepTask != null) clock.removeCallbacks(sleepTask);
+        sleepTask = null;
+        if (minutes <= 0) return;
+
+        sleepTask = () -> {
+            sleepTask = null;
+            // فقط زنگ: JS خودش pause می‌کند، نوتیفیکیشن را به‌روز می‌کند و
+            // تایمرِ خودش را پاک می‌کند. مسیرِ موازیِ خاموش‌کردن نمی‌سازیم.
+            emit("sleep", 0);
+        };
+        clock.postDelayed(sleepTask, minutes * 60_000L);
     }
 
     /** متادیتا + وضعیت + نوتیفیکیشن را با هم به‌روز می‌کند */
@@ -308,6 +344,10 @@ public class PlaybackService extends Service {
     }
 
     private void shutdown() {
+        if (sleepTask != null) {
+            clock.removeCallbacks(sleepTask);
+            sleepTask = null;
+        }
         if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
         session.setActive(false);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -348,6 +388,7 @@ public class PlaybackService extends Service {
 
     @Override
     public void onDestroy() {
+        if (sleepTask != null) clock.removeCallbacks(sleepTask);
         if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
         session.release();
         artworkPool.shutdownNow();

@@ -470,3 +470,12 @@ export const HeartIcon = ({ className = base, filled = false }: P & { filled?: b
     />
   </svg>
 )
+
+/** باتری با خطِ مورب — «چیزی اینجا محدود است»، برای ردیفِ بهینه‌سازیِ باتری */
+export const BatteryIcon = ({ className = base }: P) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className={className}>
+    <rect x="2.5" y="8" width="15" height="8" rx="2" />
+    <path d="M20.5 11v2" strokeLinecap="round" />
+    <path d="M6 8.5v7" strokeLinecap="round" />
+  </svg>
+)

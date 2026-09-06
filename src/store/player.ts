@@ -5,6 +5,7 @@ import { engine } from '../lib/audioEngine'
 import {
   ensureNotificationPermission,
   onTransport,
+  setNativeSleepTimer,
   stopPlaybackNotification,
   syncPlayback,
 } from '../lib/native'
@@ -250,6 +251,9 @@ export const usePlayer = create<PlayerState>((set, get) => {
       else if (action === 'prev') state.prev()
       else if (action === 'stop') state.close()
       else if (action === 'seek') state.seek(value)
+      // زنگِ تایمرِ خوابِ نیتیو. `pause()` نه `toggle()`: اگر JS هم‌زمان خودش
+      // تایمر را زده باشد، این یکی بی‌اثر است و دوتایی پخش را روشن نمی‌کند.
+      else if (action === 'sleep') state.pause()
     })
   }
 
@@ -624,6 +628,9 @@ export const usePlayer = create<PlayerState>((set, get) => {
 
     setSleepTimer: (minutes) => {
       clearTimeout(sleepTimer)
+      // تایمرِ سیستم همیشه با همان عدد ست/لغو می‌شود تا دو ساعت از هم
+      // واگرا نمانند (مثلاً کاربر تایمر را عوض کند وقتی صفحه پس‌زمینه است)
+      setNativeSleepTimer(minutes ?? 0)
       if (minutes === null) {
         set({ sleepAt: null })
         return
@@ -660,6 +667,9 @@ export const usePlayer = create<PlayerState>((set, get) => {
       stopPlaybackNotification()
       removeStored(RESUME_KEY)
       clearTimeout(sleepTimer)
+      // ساعتِ سیستم هم باید با ما بخوابد، وگرنه بعد از بستنِ پخش‌کننده یک
+      // «sleep» بی‌صاحب می‌آید و روی صفِ خالی `pause()` می‌زند
+      setNativeSleepTimer(0)
       // رادیوِ در حالِ fetch نباید بعد از بستنِ پخش‌کننده چیزی به صفِ خالی اضافه کند
       radioToken++
       pendingNext = null

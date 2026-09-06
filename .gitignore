@@ -1,4 +1,6 @@
 node_modules/
+# خروجیِ `scripts/android-release.mjs` — APK و mapping، حجمِ زیاد، بارِ تاریخچه نه
+release-out/
 dist/
 .env.local
 .env*.local

@@ -4,6 +4,7 @@ import { registerSW } from 'virtual:pwa-register'
 import App from './App'
 import './index.css'
 import { setupNative } from './lib/native'
+import { installErrorReporting } from './lib/telemetry'
 import { useToasts } from './store/toasts'
 
 /*
@@ -15,6 +16,10 @@ import { useToasts } from './store/toasts'
  * می‌ماند و خودِ `setupNative` آخرِ کار برش می‌دارد.
  */
 void setupNative()
+
+// باید *پیش از* اولین رندر بنشیند، وگرنه خطای همان رندر (که معمولاً
+// مهم‌ترین خط است) رد می‌شود. بی‌صداست: فقط یک fetchِ keepalive.
+installErrorReporting()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
