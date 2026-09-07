@@ -127,17 +127,41 @@ public class PlaybackPlugin extends Plugin {
             call.resolve(granted(true));
             return;
         }
-        if (getPermissionState("notifications") == com.getcapacitor.PermissionState.GRANTED) {
+        if (isGranted()) {
             call.resolve(granted(true));
             return;
         }
-        requestPermissionForAlias("notifications", call, "permissionResult");
+        // اگر خودِ درخواستِ اجازه نشد، بی‌سروصدا «داده‌نشده» جواب می‌دهیم —
+        // پخش نباید به‌خاطرِ یک نوتیفیکیشن بمیرد
+        try {
+            requestPermissionForAlias("notifications", call, "permissionResult");
+        } catch (Exception ignored) {
+            call.resolve(granted(false));
+        }
     }
 
     @PermissionCallback
     private void permissionResult(PluginCall call) {
-        call.resolve(granted(
-                getPermissionState("notifications") == com.getcapacitor.PermissionState.GRANTED));
+        call.resolve(granted(isGranted()));
+    }
+
+    /**
+     * وضعیتِ اجازه‌ی نوتیفیکیشن، مستقیم از API اندروید.
+     *
+     * عمداً از `getPermissionState("notifications")` استفاده نمی‌کنیم: آن متد
+     * آرایه‌ی `@Permission` را از راهِ بازتاب می‌خواند، و اگر R8 نوعِ آنوتیشن
+     * را حذف کرده باشد همان‌جا `NullPointerException` می‌دهد — روی نخِ
+     * `CapacitorPlugins`، یعنی کلِ اپ. آن کرش دقیقاً لحظه‌ی «پخشِ اولین
+     * آهنگ» می‌افتاد (این‌جا اولین بار اجازه پرسیده می‌شود). `checkSelfPermission`
+     * هیچ بازتابی ندارد و همان مقدارِ درست را می‌دهد.
+     *
+     * قواعدِ `-keep` در `proguard-rules.pro` علتِ اصلی را حل می‌کنند؛ این
+     * فقط کمربندِ ایمنی است تا یک بارِ دیگر، شکستِ APIیِ اجازه، پخش را نکشد.
+     */
+    private boolean isGranted() {
+        return androidx.core.content.ContextCompat.checkSelfPermission(
+                getContext(), Manifest.permission.POST_NOTIFICATIONS)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED;
     }
 
     private static JSObject granted(boolean value) {

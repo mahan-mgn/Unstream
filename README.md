@@ -844,7 +844,12 @@ UNSTREAM_RELEASE_NOTES="…" node scripts/android-release.mjs --apk --publish
 رمزگشاییِ stacktraceها) و با `UNSTREAM_RELEASES_DIR` روی سرور می‌ریزد؛
 `GET /api/release` همان manifest را می‌دهد و بنرِ اپ تا دورِ بعدی خبر می‌دهد.
 نسخه‌های عمومی هم روی [Releases](https://github.com/mahan-mgn/Unstream/releases)
-هستند (v1.2 = اولینِ امضاشده با کلیدِ ثابت).
+هستند (v1.2 = اولینِ امضاشده با کلیدِ ثابت، v1.3 = فیکسِ کرشِ پخش در ریلیزِ R8).
+
+> نکته‌ی مهم برای ریلیز: R8 آنوتیشن‌هایِ `com.getcapacitor.annotation.*` را
+> می‌بلعد و `Bridge.getPermissionStates` روی نخِ پلاگین NPE می‌دهد (کرشِ
+> لحظه‌ی پخش، فقط در بیلدِ ریلیز). `android/app/proguard-rules.pro` این
+> آنوتیشن‌ها را keep می‌کند — حذفش ممنوع.
 
 ### لایه‌ی نیتیو
 
